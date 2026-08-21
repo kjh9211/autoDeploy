@@ -1,0 +1,74 @@
+// Ops Console — Phase 0 data model.
+// Only the tables Phase 0 actually reads/writes live here (users, apps).
+// deploy_logs / dns_cache / audit_log / certs from docs/PLANNING.md §5 are
+// added when the phase that needs them (see docs/PLANNING.md §9) is built —
+// PM2/NSSM status, cert expiry, and git diff are read live from the adapters
+// in each phase instead of being cached in the DB.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum AppType {
+  node_app
+  static_web
+  discord_bot
+  minecraft
+}
+
+enum AppRuntime {
+  pm2
+  nssm
+}
+
+enum UserRole {
+  admin
+  viewer
+}
+
+/// Single/small set of operator accounts. Phase 0 only ever creates and logs
+/// in as `admin` — `role` exists so Phase 5's viewer-role UI doesn't need a
+/// schema migration later (see docs/PLANNING.md §7).
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  totpSecret   String
+  role         UserRole @default(admin)
+  createdAt    DateTime @default(now())
+
+  @@map("users")
+}
+
+/// App registry — the metadata Ops Console needs to know an app exists and
+/// how to reach it. Populated manually via /apps/new in Phase 0; the
+/// onboarding wizard in docs/PLANNING.md §3.3 that also provisions PM2,
+/// webproxy routing, and DNS is Phase 3/4.
+model App {
+  id          Int        @id @default(autoincrement())
+  name        String     @unique
+  type        AppType
+  runtime     AppRuntime
+
+  // Identifies the process to query for live status.
+  pm2Name     String?
+  nssmService String?
+
+  // Local git clone, used for the on-demand "업데이트 확인" diff (§6.4).
+  // Null for apps that aren't a git checkout (e.g. downloaded server jars).
+  localPath   String?
+  branch      String?
+
+  domain      String?
+  notes       String?    @db.Text
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("apps")
+}
