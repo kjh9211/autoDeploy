@@ -107,8 +107,8 @@
 ### 3.3 신규 앱 온보딩 마법사 (`/apps/new`)
 현재 수동으로 하는 "PM2 등록 → webproxy 라우팅 추가 → Cloudflare DNS 추가 → 인증서 확인" 흐름을 한 폼으로:
 1. 기본 정보 (이름, 타입: node-app/static-web/discord-bot/minecraft, 저장소 URL, 배포 브랜치)
-2. 실행 정보 (포트, PM2 실행 방식 또는 NSSM 서비스명, 빌드/마이그레이션 명령)
-3. 도메인 정보 (서브도메인, 대상 존, orange/grey cloud 여부) → DNS 레코드 미리보기 후 생성
+2. 실행 정보 (포트, 프레임워크 선택[Next.js/Vite/커스텀 Node] → 선택에 따라 `next start -p {port}` / `vite preview --port {port} --host` / `--interpreter node <엔트리>` 형태로 `start_cmd` 자동 생성 및 수정 가능, 또는 NSSM 서비스명, 빌드/마이그레이션 명령, 슬래시 커맨드 경로가 있으면 `commands_path`)
+3. 도메인 정보 (서브도메인, 대상 존, orange/grey cloud 여부, Host 헤더 유지 필요 여부 체크박스) → DNS 레코드 미리보기 후 생성
 4. 요약 확인 → 생성 (PM2 ecosystem 항목 생성 + webproxy 라우트 파일 반영 + Cloudflare A레코드 생성)
 
 ### 3.4 프록시 라우팅 관리 (`/proxy`)
@@ -127,6 +127,7 @@
 
 ### 3.7 데이터베이스 (`/database`)
 - 공유 MySQL의 스키마 목록(예: `security_bot`, `discord_perm_manager`), 크기, 마지막 백업 시각
+- 스키마별 "지금 백업 실행" 버튼 (§4의 백업 트리거 기능에 대응 — `mysqldump` 즉시 실행, 완료 시 마지막 백업 시각 갱신)
 - mailcow의 내부 MySQL은 관리 범위 밖임을 명시하고 mailcow 관리자 UI 링크만 제공
 - 쓰기 콘솔은 제공하지 않고, 읽기 전용 계정으로 메타데이터만 조회
 
@@ -168,9 +169,13 @@ apps(
   id, name, type ENUM('node-app','static-web','discord-bot','minecraft'),
   repo_url, local_path, branch,
   runtime ENUM('pm2','nssm'), pm2_name, nssm_service,
-  port, domain, zone,
-  build_cmd, migrate_cmd, deploy_commands_cmd, healthcheck_url,
-  db_schema, created_at
+  framework ENUM('next','vite','node-custom','other'),  -- 실행 커맨드 템플릿 선택용
+  start_cmd,             -- 예: "next start -p {port}", "vite preview --port {port} --host",
+                          -- "--interpreter node dist/index.js" — 온보딩 마법사(§3.3)가
+                          -- PM2 ecosystem 항목을 생성할 때 사용
+  port, domain, zone, preserve_host_header BOOLEAN,
+  build_cmd, migrate_cmd, deploy_commands_cmd, commands_path,
+  healthcheck_url, db_schema, created_at
 )
 
 deploy_logs(
@@ -214,7 +219,9 @@ users(
 ### 6.2 리버스 프록시 (webproxy)
 - 현재 `router` 객체가 `server.js`에 하드코딩되어 있다면, **`E:\webproxy\routes.json`** 같은 외부 설정 파일로 분리하는 작은 리팩터링이 선행 작업으로 필요
 - webproxy는 시작 시 이 파일을 로드하고, 파일 변경을 감지(`chokidar` 등)하면 라우팅 테이블만 인메모리로 핫리로드 (프로세스 재시작 없이 무중단 반영)
-- Ops Console은 이 JSON 파일을 읽고/씀 (직접 파일 쓰기 또는 webproxy가 `127.0.0.1`에만 열어두는 내부 전용 `/admin/routes` 엔드포인트 경유 — 후자가 검증 로직을 한곳에 모을 수 있어 더 안전)
+- `mail.kjh9211.kr`처럼 `proxyReq` 훅으로 Host 헤더를 유지해야 하는 특수 케이스는 일반 라우팅(Host → 포트)과 스키마가 다르므로, `routes.json`에 `{ host, target, preserveHostHeader: true }` 형태로 특수 플래그를 명시적으로 표현하고 온보딩 마법사(§3.3)에서도 "Host 헤더 유지 필요" 체크박스로 노출한다. 임의의 커스텀 훅 코드를 UI에서 작성하게 하지는 않는다 — webproxy 쪽에 미리 정의된 몇 가지 훅 종류(Host 유지, 없음)만 선택 가능하게 한다.
+- **SNI 인증서(`addContext`) 리로드는 라우팅 리로드와 별개의 메커니즘이다.** 라우팅 테이블 파일을 리로드해도 HTTPS 서버가 이미 `addContext()`로 등록한 SNI 컨텍스트 목록은 바뀌지 않으므로, 새 도메인을 추가하거나 인증서를 갱신했을 때 TLS 핸드셰이크 단계에서 막힐 수 있다. 따라서 webproxy에 `/admin/certs/reload` 같은 내부 전용 엔드포인트(또는 라우팅과 동일한 파일 워처)를 별도로 두어 `certs/` 폴더를 다시 스캔하고 `addContext()`를 재등록하도록 한다. §3.5(인증서 현황) 화면의 "적용" 액션은 반드시 이 리로드까지 트리거해야 한다.
+- Ops Console은 이 JSON 파일을 읽고/씀 (직접 파일 쓰기 또는 webproxy가 `127.0.0.1`에만 열어두는 내부 전용 `/admin/routes`, `/admin/certs/reload` 엔드포인트 경유 — 후자가 검증 로직을 한곳에 모을 수 있어 더 안전)
 - 저장 전 **검증(포트 중복, 문법 오류)** 을 반드시 거치고, 실패 시 기존 설정 유지 — 여기서 오류가 나면 전체 서비스가 영향받으므로 가장 보수적으로 다뤄야 하는 영역
 - `certs/` 폴더의 인증서는 `node-forge` 등으로 파싱해 도메인(SAN)/발급자/만료일 추출
 
@@ -227,8 +234,10 @@ users(
 ### 6.4 배포 워크플로우
 - `simple-git`으로 각 앱 로컬 클론에 대해 `fetch` → `git status --porcelain`(로컬 미커밋 변경 확인) → `git merge --ff-only` 시도
 - ff-only가 실패하면(로컬에 별도 커밋 존재) **자동 처리하지 않고 사람에게만 알림** — 기존 운영 원칙("히스토리 꼬임/강제 머지 없음")을 그대로 코드화
+- **`git status --porcelain`에 결과가 있으면(설정 파일, 데이터 파일 등 로컬 미커밋 변경) 이 시점에서 파이프라인을 자동으로 멈춘다.** 병합 시 덮어써지거나 충돌할 파일 목록을 "업데이트 확인" 화면에 보여주고, 관리자가 파일별로 "무시하고 진행" 또는 "중단"을 명시적으로 선택해야만 다음 단계(merge)로 넘어간다 — 원본 운영 원칙("pull 전 충돌 여부 확인")을 그대로 파이프라인 단계로 코드화한 것이다.
 - `package.json`/`schema.sql` diff 여부에 따라 `npm install`/마이그레이션 단계를 조건부 실행
-- 파이프라인: fetch → diff 표시 → (승인) → ff-only merge → 조건부 install/migrate → build → 조건부 deploy-commands → pm2 restart(or nssm restart) → 헬스체크 → pm2 save
+- `deploy-commands`(Discord 슬래시 커맨드 재등록) 실행 여부는 `apps.commands_path`(예: `src/commands/`)로 지정된 경로에 diff가 있는지로 판단 — `commands_path`가 비어 있는 앱(슬래시 커맨드가 없는 봇, 웹앱 등)은 이 단계 자체를 건너뛴다
+- 파이프라인: fetch → 로컬 미커밋 변경 확인(있으면 정지 및 확인 요청) → diff 표시(패키지/스키마/커맨드 변경 여부 포함) → (승인) → ff-only merge → 조건부 install/migrate → build → 조건부 deploy-commands → pm2 restart(or nssm restart) → 헬스체크 → pm2 save
 - 각 단계 stdout/stderr를 SSE로 실시간 스트리밍하고 `deploy_logs`에 영구 저장
 - 롤백: 배포 이력에서 이전 커밋 선택 → 동일 파이프라인을 그 커밋 기준으로 재실행
 
@@ -246,7 +255,11 @@ users(
 ### 6.7 마인크래프트 (NSSM)
 - Windows 서비스이므로 PowerShell(`Get-Service`, `nssm.exe status/start/stop/restart`)을 `child_process`로 호출
 - NSSM이 stdout/stderr를 리다이렉트하는 로그 파일을 tail하여 실시간 로그 제공
-- Ops Console 실행 계정에 해당 서비스 제어 권한이 필요 — 최소 권한 원칙에 따라 이 서비스들만 제어 가능한 별도 계정/권한으로 실행 검토
+- **Windows 서비스 start/stop은 기본적으로 관리자 권한이 필요**하다. Ops Console은 다른 앱들과 동일하게 PM2로 관리되므로(§2), PM2 데몬이 실행되는 OS 계정과 별개로 NSSM 서비스 제어용 저권한 계정을 새로 두는 것은 이 아키텍처상 실질적으로 어렵다. 따라서 다음 중 하나로 명시적으로 결정하고 진행한다:
+  - (권장) 대상 마인크래프트 서비스들에 한해 `sc sdset`으로 서비스 ACL을 조정해, Ops Console을 구동하는 OS 계정에게 딱 그 서비스들의 시작/중지/조회 권한만 부여 — 관리자 권한 상시 필요 없이 최소 권한 유지
+  - (대안) 관리자 권한이 필요한 위 3개 액션만 별도의 소형 상주 헬퍼(관리자 권한으로 등록된 별도 Windows 서비스)에 위임하고, Ops Console 본체는 그 헬퍼에 로컬 IPC/named pipe로만 요청 — 본체 프로세스 자체는 승격 없이 유지
+  - PM2 데몬 자체를 관리자 권한 세션에서 띄우는 방식은 Ops Console 외 다른 모든 앱까지 불필요하게 승격시키므로 채택하지 않는다
+- 이 결정은 §7 보안 설계의 "최소 권한" 원칙과 직결되므로, 실제 구현 착수 전(Phase 1) 반드시 위 옵션 중 하나를 확정한다
 
 ---
 
@@ -256,7 +269,7 @@ users(
 
 - **인증**: 자체 회원가입 없는 단일/소수 관리자 계정 + TOTP 2FA 필수, 세션 쿠키는 `HttpOnly` + `Secure` + 짧은 만료
 - **네트워크**: webproxy를 통해 인터넷에 노출되는 구조이므로, 앱 자체 로그인 위에 **Cloudflare Access(Zero Trust)** 또는 IP 허용목록을 추가로 걸어 이중 방어
-- **권한 분리**: `admin`(변경 가능) / `viewer`(조회만) 최소 2단계 역할
+- **권한 분리**: `users.role`에 `admin`/`viewer` 값은 §1의 "1인 운영 전제"에 맞춰 스키마에만 미리 자리를 잡아두고, **실제 로그인 화면·역할 전환 UI는 만들지 않는다.** 1인 운영에서 이 구분은 실질적 가치가 낮고, 나중에 협업자가 생기면 스키마 변경 없이 UI만 추가하면 되도록 여지만 남겨두는 것 — 과설계를 피하기 위해 Phase 5(§9) 이전에는 사실상 `admin` 단일 계정으로만 동작
 - **감사 로그**: 모든 변경 작업(재시작, 배포, DNS/라우팅/도메인 변경)을 append-only로 기록, 행위자·시각·대상·변경 전후 값 포함
 - **위험 작업 확인**: 재시작/삭제/DNS 변경 등은 클릭 즉시 실행하지 않고 확인 모달 + (선택) 2차 확인
 - **비밀 관리**: Cloudflare API 토큰, mailcow API 키, DB 자격증명은 `.env`/Windows Credential Manager에만 보관, DB나 클라이언트에 저장하지 않음, 최소 스코프로 발급
