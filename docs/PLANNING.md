@@ -260,6 +260,7 @@ users(
   - (대안) 관리자 권한이 필요한 위 3개 액션만 별도의 소형 상주 헬퍼(관리자 권한으로 등록된 별도 Windows 서비스)에 위임하고, Ops Console 본체는 그 헬퍼에 로컬 IPC/named pipe로만 요청 — 본체 프로세스 자체는 승격 없이 유지
   - PM2 데몬 자체를 관리자 권한 세션에서 띄우는 방식은 Ops Console 외 다른 모든 앱까지 불필요하게 승격시키므로 채택하지 않는다
 - 이 결정은 §7 보안 설계의 "최소 권한" 원칙과 직결되므로, 실제 구현 착수 전(Phase 1) 반드시 위 옵션 중 하나를 확정한다
+- **결정 (Phase 1 구현 시 확정)**: 권장안 (a) `sc sdset` 채택. 별도 헬퍼 프로세스는 이 시점에 들이기엔 구현 비용 대비 이득이 낮다고 판단 — 대상 서비스가 몇 개(Velocity + Paper N대) 뿐이라 ACL 조정으로 충분함. 정확한 `sc sdset` 명령과 절차는 README.md의 "Windows에 배포하기" 섹션에 문서화. 코드는 `src/lib/adapters/nssm.ts`의 `controlWindowsService()`가 항상 일반 사용자 권한으로 `Start-Service`/`Stop-Service`/`Restart-Service`를 호출하고, ACL이 아직 설정되지 않은 서비스에 대해서는 크래시 없이 접근 거부 오류를 그대로 반환한다.
 
 ---
 
@@ -304,7 +305,7 @@ users(
 | 단계 | 범위 |
 |---|---|
 | Phase 0 | 앱 레지스트리 + 로그인/2FA + **읽기 전용** 대시보드 (PM2 상태, NSSM 상태, 인증서 만료일, git 로컬/원격 diff만 표시, 제어 기능 없음) |
-| Phase 1 | 제어 기능 추가: pm2 restart/reload, nssm start/stop/restart, 실시간 로그 tail, 감사 로그 |
+| Phase 1 | 제어 기능 추가: pm2/nssm start/stop/restart, 실시간 로그 tail, 감사 로그. (`pm2 reload`의 무중단 롤링 재시작은 cluster 모드 프로세스에서만 의미가 있고 현재 앱들은 fork 모드 컨벤션(§6.1)이라 이번 범위에서 제외 — cluster 모드 앱이 생기면 추가) |
 | Phase 2 | 배포 파이프라인 자동화: 업데이트 확인 → 배포 실행 원클릭, 실행 로그 스트리밍, 배포 이력, 롤백 |
 | Phase 3 | 리버스 프록시 라우팅 CRUD(파일 기반 핫리로드) + Cloudflare DNS 조회/편집 + 인증서 통합 현황 |
 | Phase 4 | mailcow 연동(도메인/DKIM/컨테이너 헬스), 신규 앱 온보딩 마법사(1~4단계 통합) |

@@ -17,6 +17,7 @@ const schema = z
     localPath: z.preprocess(emptyToUndefined, z.string().optional()),
     branch: z.preprocess(emptyToUndefined, z.string().optional()),
     domain: z.preprocess(emptyToUndefined, z.string().optional()),
+    logPath: z.preprocess(emptyToUndefined, z.string().optional()),
     notes: z.preprocess(emptyToUndefined, z.string().optional()),
   })
   .refine((v) => (v.runtime === "pm2" ? !!v.pm2Name : true), {

@@ -8,6 +8,8 @@ import { AppForm } from "@/components/AppForm";
 import { updateApp } from "./actions";
 import { UpdateCheckButton } from "./UpdateCheckButton";
 import { DeleteAppButton } from "./DeleteAppButton";
+import { ControlButtons } from "./ControlButtons";
+import { LogViewer } from "./LogViewer";
 
 export default async function AppDetailPage(props: PageProps<"/apps/[id]">) {
   const { id } = await props.params;
@@ -36,7 +38,10 @@ export default async function AppDetailPage(props: PageProps<"/apps/[id]">) {
             <StatusBadge health={health} detail={detail} />
           </div>
         </div>
-        <DeleteAppButton appId={app.id} appName={app.name} />
+        <div className="flex items-start gap-2">
+          <ControlButtons appId={app.id} health={health} />
+          <DeleteAppButton appId={app.id} appName={app.name} />
+        </div>
       </div>
 
       {app.runtime === "pm2" && pm2Proc && (
@@ -60,6 +65,9 @@ export default async function AppDetailPage(props: PageProps<"/apps/[id]">) {
         </section>
       )}
 
+      {((app.runtime === "pm2" && app.pm2Name) ||
+        (app.runtime === "nssm" && app.logPath)) && <LogViewer appId={app.id} />}
+
       {app.localPath && (
         <section className="flex flex-col gap-3">
           <h2 className="font-medium">배포</h2>
@@ -82,6 +90,7 @@ export default async function AppDetailPage(props: PageProps<"/apps/[id]">) {
             localPath: app.localPath ?? undefined,
             branch: app.branch ?? undefined,
             domain: app.domain ?? undefined,
+            logPath: app.logPath ?? undefined,
             notes: app.notes ?? undefined,
           }}
         />

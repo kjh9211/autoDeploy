@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { href: "/", label: "대시보드" },
   { href: "/apps", label: "앱" },
   { href: "/proxy/certs", label: "인증서" },
+  { href: "/audit", label: "감사 로그" },
 ];
 
 export default async function DashboardLayout({

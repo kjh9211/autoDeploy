@@ -87,3 +87,29 @@ export async function findPm2Process(
   if (!result.ok) return null;
   return result.processes.find((p) => p.name === name) ?? null;
 }
+
+export type Pm2Action = "start" | "stop" | "restart";
+
+export type Pm2ControlResult = { ok: true } | { ok: false; error: string };
+
+// Phase 1 control action (docs/PLANNING.md §9) — every call is written to
+// the audit log by the caller, never invoked silently.
+export async function controlPm2Process(
+  name: string,
+  action: Pm2Action,
+): Promise<Pm2ControlResult> {
+  try {
+    await connect();
+    await new Promise<void>((resolve, reject) => {
+      const cb = (err: Error | null) => (err ? reject(err) : resolve());
+      if (action === "start") pm2.start(name, cb);
+      else if (action === "stop") pm2.stop(name, cb);
+      else pm2.restart(name, cb);
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    disconnect();
+  }
+}

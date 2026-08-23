@@ -18,6 +18,7 @@ export type AppFormDefaults = {
   localPath?: string;
   branch?: string;
   domain?: string;
+  logPath?: string;
   notes?: string;
 };
 
@@ -95,16 +96,28 @@ export function AppForm({
           />
         </label>
       ) : (
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">NSSM 서비스 이름</span>
-          <input
-            type="text"
-            name="nssmService"
-            defaultValue={defaults?.nssmService}
-            placeholder="Windows 서비스 이름"
-            className={inputClass}
-          />
-        </label>
+        <>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">NSSM 서비스 이름</span>
+            <input
+              type="text"
+              name="nssmService"
+              defaultValue={defaults?.nssmService}
+              placeholder="Windows 서비스 이름"
+              className={inputClass}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">로그 파일 경로 (선택)</span>
+            <input
+              type="text"
+              name="logPath"
+              defaultValue={defaults?.logPath}
+              placeholder="예: E:\minecraft\velocity\logs\latest.log — 실시간 로그 보기에 사용"
+              className={inputClass}
+            />
+          </label>
+        </>
       )}
 
       <label className="flex flex-col gap-1 text-sm">

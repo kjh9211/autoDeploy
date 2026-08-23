@@ -1,9 +1,8 @@
-// Ops Console — Phase 0 data model.
-// Only the tables Phase 0 actually reads/writes live here (users, apps).
-// deploy_logs / dns_cache / audit_log / certs from docs/PLANNING.md §5 are
-// added when the phase that needs them (see docs/PLANNING.md §9) is built —
-// PM2/NSSM status, cert expiry, and git diff are read live from the adapters
-// in each phase instead of being cached in the DB.
+// Ops Console data model — tables are added as the phase that needs them
+// (docs/PLANNING.md §9) is built, not all up front. Phase 0 added User/App;
+// Phase 1 adds AuditLog for control actions. deploy_logs / dns_cache / certs
+// from docs/PLANNING.md §5 are still deferred — PM2/NSSM status, cert
+// expiry, and git diff are read live from the adapters, not cached in the DB.
 
 generator client {
   provider = "prisma-client"
@@ -67,8 +66,34 @@ model App {
   domain      String?
   notes       String?    @db.Text
 
+  // Only used for an NSSM app's real-time log tail (Phase 1, §9) — the file
+  // NSSM's AppStdout/AppStderr redirect to. PM2 apps stream via pm2's log
+  // bus instead and don't need this.
+  logPath     String?
+
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
   @@map("apps")
+}
+
+enum AuditAction {
+  app_start
+  app_stop
+  app_restart
+}
+
+/// Every control action (docs/PLANNING.md §7 — "위험한 작업에 대한 감사 로그").
+/// Read-only actions (status checks, git fetch) are not logged here.
+model AuditLog {
+  id         Int         @id @default(autoincrement())
+  actorEmail String
+  action     AuditAction
+  appId      Int?
+  appName    String
+  success    Boolean
+  detail     String?     @db.Text
+  createdAt  DateTime    @default(now())
+
+  @@map("audit_log")
 }
