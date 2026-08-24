@@ -16,7 +16,9 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Everything except /login itself and static assets.
-    "/((?!login|_next/static|_next/image|favicon.ico).*)",
+    // Everything except /login itself, the dependency-free ping probe
+    // (docs/PLANNING.md §9 — must respond without a session either way),
+    // and static assets.
+    "/((?!login|api/ping|_next/static|_next/image|favicon.ico).*)",
   ],
 };

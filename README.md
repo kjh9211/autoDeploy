@@ -43,7 +43,7 @@ npx prisma migrate deploy
 npx prisma generate
 ```
 
-를 실행하고 나서 앱을 재시작할 것 (`npm run dev` 또는 `pm2 restart ops-console`).
+를 실행하고 나서 앱을 재시작할 것 (`npm run dev` 또는 `pm2 restart ops-console`). (프로덕션에서 아래 "자동 업데이트로 배포"를 쓰고 있다면 이 과정은 `run.js`가 알아서 하므로 신경 쓸 필요 없다 — 로컬 개발 환경에는 여전히 해당된다.)
 
 ### 환경 변수
 
@@ -67,7 +67,22 @@ pm2 start node_modules/next/dist/bin/next --name ops-console --interpreter node 
 pm2 save
 ```
 
-webproxy에 `ops.<domain>` 같은 서브도메인 라우팅을 추가해 이 포트로 연결하면 된다.
+webproxy에 `ops.<domain>` 같은 서브도메인 라우팅을 추가해 이 포트로 연결하면 된다. 최초 설정이나 문제 상황 디버깅용으로는 이 방식을 그대로 쓰고, 평소 운영은 아래 "자동 업데이트"로 띄우는 걸 권장한다.
+
+### 자동 업데이트로 배포 (권장)
+
+`main`에 새 커밋이 올라올 때마다 서버에 직접 들어가서 `git pull` → `prisma migrate deploy`/`generate` → `npm run build` → 재시작을 손으로 해줘야 하는 게 반복되는 실수 지점이었다(예: 재생성을 빼먹고 재시작해서 `prisma.deployLog`가 `undefined`가 되는 오류). `run.js`는 이 전체 과정을 자체 프로세스 안에서 반복한다 — 자체 제작 npm 패키지 [`@kjh9211/autoupdate`](https://www.npmjs.com/package/@kjh9211/autoupdate)로 `main`을 주기적으로 fetch해서 새 커밋이 있으면 pull하고, `scripts/ensure-built.js`로 마이그레이션/빌드를 실행한 뒤, 다음 정각/30분에 재시작한다.
+
+```powershell
+PORT=<port> pm2 start run.js --name ops-console --interpreter node
+pm2 save
+```
+
+- `scripts/ensure-built.js`는 "현재 git HEAD 커밋으로 이미 빌드됐는지"를 `.next/OPS_CONSOLE_BUILT_SHA`로 확인한다. 아니면 `prisma migrate deploy` → `prisma generate` → `next build` 순으로 실행하고 마커를 갱신한다. `npm`/`npx` 같은 `.cmd` 래퍼를 거치지 않고 항상 `node_modules` 안의 실제 `.js` 엔트리를 `node`로 직접 실행한다(PM2와 얽혀 문제가 생긴 전례가 있어서 — 위 "프로덕션 배포" 절과 동일한 이유).
+- 이 확인은 두 곳에서 실행된다: (1) 새 커밋을 pull한 직후(`onUpdate` 콜백, 빠른 경로) — 재시작 전에 미리 빌드를 끝내 두어 다운타임을 줄인다. (2) 실제로 재시작해서 앱을 spawn하기 직전(`startScript` 자체, 안전망) — 만약 (1)이 예정된 재시작 시각 전에 못 끝났어도(빌드가 오래 걸리는 경우) 여기서 한 번 더 걸러져서, 절대 안 맞는 커밋으로 서버가 뜨는 일이 없다.
+- 마이그레이션/빌드가 실패하면 `&&`로 묶여 있어 그 시도의 `next start` 자체가 실행되지 않고 프로세스가 비정상 종료된다 — 깨진 코드로 조용히 뜨는 대신 크래시 후 백오프 재시도(`maxRestarts`, 기본 10회)로 넘어간다. 계속 실패하면(예: main에 실제 빌드 에러가 들어간 경우) 재시도를 포기하고 멈추므로 수동 확인이 필요하다.
+- **`prisma migrate deploy`가 사람 확인 없이 자동 실행된다는 뜻이다.** `migrate deploy`는 이미 저장소에 커밋된 마이그레이션 파일만 순서대로 적용하는 명령이라(새 마이그레이션을 그 자리에서 생성하지 않음) 스키마 변경 자체는 PR 리뷰 시점에 이미 확정돼 있지만, "머지되면 곧 실제 운영 DB에 적용된다"는 걸 감안하고 써야 한다.
+- 크래시가 반복돼 `autoupdate`가 재시도를 포기하면 `run.js` 프로세스 자체가 종료되므로, PM2가 마지막 안전망으로 `run.js`를 다시 띄운다(부팅 시점에도 `ensure-built`를 한 번 더 확인).
 
 ### 마인크래프트(NSSM) 서비스 제어 권한 설정
 
@@ -112,6 +127,16 @@ sc.exe sdset <서비스이름> "D:(A;;RPWPLCRC;;;$sid)<...기존 DACL 나머지.
 ### PM2에서 앱 가져오기
 
 `/apps/new/from-pm2`는 이미 PM2로 떠 있지만 아직 등록되지 않은 프로세스(등록된 앱의 `pm2Name`과 겹치지 않는 것)를 `pm2 list`로 조회해 목록으로 보여준다. "이 프로세스 등록" 버튼 한 번이면 이름·PM2 프로세스명·로컬 경로(PM2의 작업 디렉터리)가 PM2에서 읽은 값 그대로 채워진 앱 row가 만들어지고, 곧바로 그 앱의 상세 페이지로 이동한다 — 도메인·배포 명령 등 나머지 항목은 거기서 채우면 된다. PM2 프로세스 이름과 같은 이름의 앱이 이미 있으면(이름 중복) 등록을 거부하고 오류를 보여준다. `.cmd` 등 비표준 방식으로 실행 중인 프로세스는(docs/PLANNING.md §6.1) 목록에 경고로 표시된다.
+
+### 헬스체크(핑) 라우트
+
+`GET /api/ping`은 DB·PM2·NSSM·git·외부 API를 전혀 부르지 않는 최소 응답(`{ ok, now, uptimeSec }`)만 반환한다. 로그인 세션 검사(`src/proxy.ts`)도 건너뛰므로 인증 없이 항상 응답한다. 페이지가 느릴 때 이 라우트로 원인을 구분할 수 있다:
+
+- 서버에서 `curl -w "%{time_total}s\n" http://localhost:<port>/api/ping` — Next.js 프로세스 자체가 느린지 확인
+- 바깥에서 `curl -w "%{time_total}s\n" https://<도메인>/api/ping` — webproxy/Cloudflare 구간 지연인지 확인
+- 두 값 다 빠른데 특정 페이지만 느리면 그 페이지가 부르는 라이브 조회(PM2/NSSM/git/Cloudflare 등)가 원인이라는 뜻
+
+이 라우트에는 앞으로도 무거운 로직을 추가하지 않는다 — 그 순간 진단용 기준점으로서의 의미가 없어진다.
 
 ## 스크립트
 
