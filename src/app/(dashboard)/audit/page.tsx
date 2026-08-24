@@ -6,6 +6,9 @@ const ACTION_LABEL: Record<string, string> = {
   app_restart: "재시작",
   app_deploy: "배포",
   app_rollback: "롤백",
+  proxy_route_change: "프록시 라우트 변경",
+  proxy_certs_reload: "인증서 리로드",
+  dns_record_change: "DNS 레코드 변경",
 };
 
 function formatTimestamp(d: Date) {
@@ -23,7 +26,7 @@ export default async function AuditLogPage() {
       <div>
         <h1 className="text-xl font-semibold">감사 로그</h1>
         <p className="text-sm text-black/50 dark:text-white/50 mt-1">
-          최근 200건 · 재시작/중지/시작/배포/롤백 등 제어 작업만 기록됩니다.
+          최근 200건 · 재시작/중지/시작/배포/롤백/프록시·DNS 변경 등 제어 작업만 기록됩니다.
         </p>
       </div>
 
@@ -34,7 +37,7 @@ export default async function AuditLogPage() {
               <th className="py-2 pr-4 font-medium">시각</th>
               <th className="py-2 pr-4 font-medium">관리자</th>
               <th className="py-2 pr-4 font-medium">작업</th>
-              <th className="py-2 pr-4 font-medium">앱</th>
+              <th className="py-2 pr-4 font-medium">대상</th>
               <th className="py-2 pr-4 font-medium">결과</th>
               <th className="py-2 pr-4 font-medium">상세</th>
             </tr>

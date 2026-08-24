@@ -224,12 +224,14 @@ users(
 - Ops Console은 이 JSON 파일을 읽고/씀 (직접 파일 쓰기 또는 webproxy가 `127.0.0.1`에만 열어두는 내부 전용 `/admin/routes`, `/admin/certs/reload` 엔드포인트 경유 — 후자가 검증 로직을 한곳에 모을 수 있어 더 안전)
 - 저장 전 **검증(포트 중복, 문법 오류)** 을 반드시 거치고, 실패 시 기존 설정 유지 — 여기서 오류가 나면 전체 서비스가 영향받으므로 가장 보수적으로 다뤄야 하는 영역
 - `certs/` 폴더의 인증서는 `node-forge` 등으로 파싱해 도메인(SAN)/발급자/만료일 추출
+- **구현 시 확정 (Phase 3)**: webproxy는 이 저장소 밖의 별도 코드베이스라 Ops Console에서 직접 리팩터링할 수 없었다. 대신 위 계약(`/admin/routes`, `/admin/certs/reload`)을 클라이언트(`src/lib/adapters/webproxy.ts`)로만 구현하고, webproxy 쪽 참고 구현(routes.json 핫리로드, 별도 127.0.0.1 전용 리스너, 인증서 리로드)은 `docs/webproxy-integration.md`에 문서화했다 — 실제 webproxy에 적용하는 건 별도 작업. 포트 중복 등 검증은 계획대로 webproxy 쪽 책임으로 남겨 Ops Console은 응답의 성공/실패만 그대로 보여준다.
 
 ### 6.3 DNS/TLS (Cloudflare)
 - Cloudflare API Token(Zone:DNS:Edit, Zone:Zone:Read로 스코프 최소화)을 서버 환경변수로 보관
-- 존별 레코드 목록 조회 → `dns_cache`에 캐싱 후 주기적 동기화, 오리진 IP(`49.174.34.38`)와 다른 레코드/의도와 다른 proxied 값 강조
+- 존별 레코드 목록 조회, 오리진 IP(환경변수로 설정)와 다른 레코드/`mail.*`인데 orange-cloud인 레코드 강조
 - Origin CA 인증서 발급 상태는 Cloudflare API의 `origin_ca` 엔드포인트로 조회 가능한 범위까지 반영
 - 모든 Cloudflare 호출은 서버 사이드 전용, 토큰은 프론트엔드에 절대 전달하지 않음
+- **구현 시 확정 (Phase 3)**: `dns_cache` 테이블은 만들지 않고 PM2/NSSM 상태와 동일하게 매 요청마다 Cloudflare API를 직접 조회한다(개인 운영 대시보드 트래픽량에선 캐싱이 필요 없음). Origin CA 발급 상태 조회는 이번 범위에서 제외 — 로컬 `certs/` 폴더 파싱(§3.5, Phase 0)과 리로드(위 §6.2)만으로 인증서 현황 요구사항은 충분히 커버된다고 보고 후순위로 미룸. **실제 Cloudflare 계정 토큰 없이 구현**했고, Cloudflare API 응답 형식을 그대로 흉내 낸 목 서버로만 요청/응답 처리 로직을 검증했다 — 특히 쓰기 경로(`updateDnsRecord`/`createDnsRecord`)는 실제 토큰으로 한 번 더 확인 후 신뢰할 것.
 
 ### 6.4 배포 워크플로우
 - `simple-git`으로 각 앱 로컬 클론에 대해 `fetch` → `git status --porcelain`(로컬 미커밋 변경 확인) → `git merge --ff-only` 시도
@@ -309,7 +311,7 @@ users(
 | Phase 0 | 앱 레지스트리 + 로그인/2FA + **읽기 전용** 대시보드 (PM2 상태, NSSM 상태, 인증서 만료일, git 로컬/원격 diff만 표시, 제어 기능 없음) |
 | Phase 1 | 제어 기능 추가: pm2/nssm start/stop/restart, 실시간 로그 tail, 감사 로그. (`pm2 reload`의 무중단 롤링 재시작은 cluster 모드 프로세스에서만 의미가 있고 현재 앱들은 fork 모드 컨벤션(§6.1)이라 이번 범위에서 제외 — cluster 모드 앱이 생기면 추가) |
 | Phase 2 | 배포 파이프라인 자동화: 업데이트 확인 → 배포 실행 원클릭, 실행 로그 스트리밍, 배포 이력, 롤백. 로컬 미커밋 변경 발견 시 자동 중단(§6.4)은 관리자가 "무시하고 진행" 체크박스로 명시적으로 넘겨야만 통과되도록 구현 |
-| Phase 3 | 리버스 프록시 라우팅 CRUD(파일 기반 핫리로드) + Cloudflare DNS 조회/편집 + 인증서 통합 현황 |
+| Phase 3 | 리버스 프록시 라우팅 CRUD + Cloudflare DNS 조회/편집 + 인증서 리로드. webproxy는 이 저장소 밖의 별도 코드베이스라 Ops Console은 webproxy가 노출해야 하는 내부 관리 API(§6.2)의 **클라이언트**만 구현하고, webproxy 쪽 반영 방법은 `docs/webproxy-integration.md`에 참고 구현으로 문서화(직접 수정 불가) — 마찬가지로 Cloudflare 연동도 실제 계정 토큰 없이 구현해 Cloudflare API 응답 형식을 흉내 낸 목 서버로만 검증, 프로덕션 반영 전 실제 토큰으로 한 번 더 확인 필요 |
 | Phase 4 | mailcow 연동(도메인/DKIM/컨테이너 헬스), 신규 앱 온보딩 마법사(1~4단계 통합) |
 | Phase 5 | Discord 알림, MySQL 백업 모니터링, 권한 세분화, 모바일 대응 UI |
 

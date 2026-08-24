@@ -1,9 +1,11 @@
 // Ops Console data model — tables are added as the phase that needs them
 // (docs/PLANNING.md §9) is built, not all up front. Phase 0 added User/App;
-// Phase 1 added AuditLog for control actions; Phase 2 adds DeployLog and the
-// App fields the deploy pipeline needs. dns_cache / certs from
-// docs/PLANNING.md §5 are still deferred — cert expiry and PM2/NSSM status
-// are read live from the adapters, not cached in the DB.
+// Phase 1 added AuditLog for control actions; Phase 2 added DeployLog and the
+// App fields the deploy pipeline needs. Phase 3 (webproxy routes, Cloudflare
+// DNS) adds no tables at all — both are read live from their adapters, same
+// as PM2/NSSM status and cert expiry, and only route/DNS *changes* land in
+// AuditLog. docs/PLANNING.md §5's dns_cache is deliberately skipped for the
+// same reason PM2/NSSM state was never cached.
 
 generator client {
   provider = "prisma-client"
@@ -98,6 +100,9 @@ enum AuditAction {
   app_restart
   app_deploy
   app_rollback
+  proxy_route_change
+  proxy_certs_reload
+  dns_record_change
 }
 
 /// Every control action (docs/PLANNING.md §7 — "위험한 작업에 대한 감사 로그").

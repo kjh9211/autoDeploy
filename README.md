@@ -3,11 +3,12 @@
 Windows 서버(PM2 · 리버스 프록시 · Cloudflare · MySQL · mailcow · 마인크래프트 NSSM)의 배포 구조를 한 화면에서 조회·통제하는 관리자 콘솔.
 
 - 기획서: [`docs/PLANNING.md`](docs/PLANNING.md)
-- 현재 구현 범위: **Phase 0 + Phase 1 + Phase 2** (docs/PLANNING.md §9)
+- 현재 구현 범위: **Phase 0 + Phase 1 + Phase 2 + Phase 3** (docs/PLANNING.md §9)
   - Phase 0: 앱 레지스트리, 로그인+2FA, PM2/NSSM 상태·인증서 만료일·git 로컬/원격 diff를 보여주는 읽기 전용 대시보드
   - Phase 1: 앱 시작/중지/재시작, PM2 로그 실시간 스트리밍(NSSM은 로그 파일 경로를 등록하면 동일하게 지원), 모든 제어 작업의 감사 로그(`/audit`)
   - Phase 2: 배포 파이프라인 자동화 — "배포 실행" 한 번으로 fetch → 병합 → (필요시) install/마이그레이션/빌드/슬래시커맨드 배포 → 재시작 → 헬스체크 → `pm2 save`까지 실행, 단계별 실시간 로그(`/deploys/[id]`), 배포 이력(`/deploys`), 이전 배포 시점으로 롤백
-  - 리버스 프록시/DNS 편집·mailcow 연동은 이후 단계(Phase 3~4)
+  - Phase 3: 리버스 프록시 라우팅 관리(`/proxy`) + 인증서 리로드 + Cloudflare DNS 조회/편집(`/dns`, 오리진 IP 불일치·`mail.*` orange-cloud 오류 강조). **webproxy 쪽 연동은 별도 적용이 필요** — 아래 "webproxy 연동" 절 참고. Cloudflare 연동은 실제 토큰 없이 구현해 목 서버로만 검증했으니 실제 토큰으로 한 번 더 확인할 것
+  - mailcow 연동은 이후 단계(Phase 4)
 
 ## 요구사항
 
@@ -39,6 +40,8 @@ npm run dev   # http://localhost:3000
 | `SESSION_SECRET` | 세션 쿠키 서명 키. `openssl rand -hex 32`로 생성 |
 | `CERTS_DIR` | webproxy가 `addContext()`로 로드하는 것과 같은 인증서 폴더 (예: `E:\webproxy\certs`) |
 | `DUMP_PM2_PATH` | `pm2 save`가 쓰는 `dump.pm2` 경로 |
+| `WEBPROXY_ADMIN_URL` / `WEBPROXY_ADMIN_TOKEN` | (선택) webproxy 내부 관리 API. 아래 "webproxy 연동" 참고 — 없어도 `/proxy`는 안내만 표시하고 나머지 기능엔 영향 없음 |
+| `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ZONES` / `ORIGIN_IP` | (선택) Cloudflare DNS 연동. `CLOUDFLARE_ZONES`는 콤마로 구분한 존 이름 목록 (예: `kjh9211.kr,noahsoft.kr`). 없어도 `/dns`는 안내만 표시 |
 
 ## 프로덕션 배포 (Windows, PM2)
 
@@ -75,6 +78,14 @@ sc.exe sdset <서비스이름> "D:(A;;RPWPLCRC;;;$sid)<...기존 DACL 나머지.
 앱 등록/수정 화면의 "배포 설정" 항목(빌드 명령, DB 마이그레이션 명령, 슬래시 커맨드 배포 명령, 헬스체크 URL)은 로그인한 관리자가 직접 입력하는 값이며, 그대로 셸에서 실행된다. 요청으로 들어오는 값이 아니라 이미 관리자가 손으로 직접 실행하던 것과 동일한 명령을 한 번 등록해두는 것뿐이므로, docs/PLANNING.md §7의 "임의 명령 실행 콘솔 금지" 원칙과 배치되지 않는다 — 다만 앱 등록 폼 자체를 신뢰되지 않은 사람에게 열어주면 안 된다는 뜻이기도 하다.
 
 배포 파이프라인은 앱마다 최대 하나만 동시에 실행되도록 막혀 있고(이미 진행 중이면 새로 시작 거부), 로컬에 커밋되지 않은 변경이 있으면 관리자가 "무시하고 진행"을 직접 선택하지 않는 한 자동으로 멈춘다.
+
+### webproxy 연동
+
+`E:\webproxy`는 이 저장소 밖의 별도 코드베이스라, `/proxy`(라우팅 관리)와 `/proxy/certs`의 "webproxy에 반영" 버튼이 실제로 동작하려면 webproxy 쪽에 내부 관리 API를 먼저 구현해야 한다 — **참고 구현과 정확한 계약은 [`docs/webproxy-integration.md`](docs/webproxy-integration.md)에 문서화**해뒀다. 적용 전에는 두 화면이 연결 실패 안내만 보여줄 뿐 나머지 기능(앱 관리, 배포, DNS 등)에는 아무 영향이 없다.
+
+### DNS 확인 규칙
+
+`/dns`는 두 가지만 자동으로 강조한다: (1) A레코드 값이 `ORIGIN_IP`와 다른 경우, (2) `mail.`로 시작하는 레코드인데 orange-cloud(proxied)인 경우. 그 외의 경우는 경고를 띄우지 않는다 — 의도적으로 grey-cloud를 쓰는 레코드가 있을 수 있어서다.
 
 ## 스크립트
 
