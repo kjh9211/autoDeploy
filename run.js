@@ -38,7 +38,10 @@ const app = new App({
   // ensure-built.js가 자체적으로 "이미 이 커밋으로 빌드됐는지" 확인하므로,
   // 아래 onUpdate가 예정된 재시작 전에 못 끝나도(느린 빌드) 자식 프로세스가
   // 실제로 뜨기 직전에 한 번 더 걸러진다 — 두 겹 안전장치.
-  startScript: `${process.execPath} ${ENSURE_BUILT} && ${process.execPath} ${NEXT_BIN} start -p ${PORT}`,
+  // spawn(..., { shell: true })로 실행되므로 Windows의 기본 Node 설치 경로
+  // (C:\Program Files\nodejs\node.exe)처럼 공백이 섞인 경로는 반드시 따옴표로
+  // 감싸야 한다 — 안 그러면 cmd.exe가 공백에서 명령을 잘라 먹는다.
+  startScript: `"${process.execPath}" "${ENSURE_BUILT}" && "${process.execPath}" "${NEXT_BIN}" start -p ${PORT}`,
   onUpdate: async (commitMessages, restartAt) => {
     console.log("[run] 업데이트 발견:", commitMessages, "재시작 예정:", restartAt.toISOString());
     try {
