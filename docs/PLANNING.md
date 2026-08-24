@@ -111,6 +111,8 @@
 3. 도메인 정보 (서브도메인, 대상 존, orange/grey cloud 여부, Host 헤더 유지 필요 여부 체크박스) → DNS 레코드 미리보기 후 생성
 4. 요약 확인 → 생성 (PM2 ecosystem 항목 생성 + webproxy 라우트 파일 반영 + Cloudflare A레코드 생성)
 
+**구현 시 확정 (Phase 4)**: 위 4단계 마법사 대신, 기존 `/apps/new` 폼(§3.3 초안 이전부터 있던 앱 등록 폼)에 "배포 인프라 자동 설정" 섹션(webproxy 라우팅 생성 여부 체크박스 + 포트/Host헤더유지, Cloudflare DNS 생성 여부 체크박스 + 존/orange-cloud)을 추가하는 형태로 단순화했다. 별도 미리보기·요약 단계나 PM2 ecosystem 파일 자동 생성, 프레임워크별 `start_cmd` 자동완성은 이번 범위에서 제외 — 한 화면 폼으로도 "앱 등록 + 라우팅 + DNS"를 한 번에 끝내는 목적은 달성되고, PM2 자체 등록은 여전히 관리자가 서버에서 `pm2 start`로 직접 하는 영역이라(Ops Console은 이미 떠 있는 프로세스를 조회/제어할 뿐, 새 프로세스를 원격으로 기동하는 기능은 없음) 자동화 대상이 아니다. 각 단계는 best-effort로 실행되어 webproxy/DNS 생성이 실패해도 앱 등록 자체는 그대로 성공 처리되고, 실패 내용은 리다이렉트된 앱 상세 화면에 경고로 표시된다.
+
 ### 3.4 프록시 라우팅 관리 (`/proxy`)
 - 테이블: Host 헤더 → 대상 포트, 유형(프록시 / 302 리다이렉트 / Host 헤더 유지 특수케이스), 담당 앱
 - 신규/수정/삭제는 코드 직접 수정이 아니라 **라우트 설정 파일(JSON)** 을 통해 이루어지고, webproxy가 이를 자동 리로드 (§6.2)
@@ -224,12 +226,14 @@ users(
 - Ops Console은 이 JSON 파일을 읽고/씀 (직접 파일 쓰기 또는 webproxy가 `127.0.0.1`에만 열어두는 내부 전용 `/admin/routes`, `/admin/certs/reload` 엔드포인트 경유 — 후자가 검증 로직을 한곳에 모을 수 있어 더 안전)
 - 저장 전 **검증(포트 중복, 문법 오류)** 을 반드시 거치고, 실패 시 기존 설정 유지 — 여기서 오류가 나면 전체 서비스가 영향받으므로 가장 보수적으로 다뤄야 하는 영역
 - `certs/` 폴더의 인증서는 `node-forge` 등으로 파싱해 도메인(SAN)/발급자/만료일 추출
+- **구현 시 확정 (Phase 3)**: webproxy는 이 저장소 밖의 별도 코드베이스라 Ops Console에서 직접 리팩터링할 수 없었다. 대신 위 계약(`/admin/routes`, `/admin/certs/reload`)을 클라이언트(`src/lib/adapters/webproxy.ts`)로만 구현하고, webproxy 쪽 참고 구현(routes.json 핫리로드, 별도 127.0.0.1 전용 리스너, 인증서 리로드)은 `docs/webproxy-integration.md`에 문서화했다 — 실제 webproxy에 적용하는 건 별도 작업. 포트 중복 등 검증은 계획대로 webproxy 쪽 책임으로 남겨 Ops Console은 응답의 성공/실패만 그대로 보여준다.
 
 ### 6.3 DNS/TLS (Cloudflare)
 - Cloudflare API Token(Zone:DNS:Edit, Zone:Zone:Read로 스코프 최소화)을 서버 환경변수로 보관
-- 존별 레코드 목록 조회 → `dns_cache`에 캐싱 후 주기적 동기화, 오리진 IP(`49.174.34.38`)와 다른 레코드/의도와 다른 proxied 값 강조
+- 존별 레코드 목록 조회, 오리진 IP(환경변수로 설정)와 다른 레코드/`mail.*`인데 orange-cloud인 레코드 강조
 - Origin CA 인증서 발급 상태는 Cloudflare API의 `origin_ca` 엔드포인트로 조회 가능한 범위까지 반영
 - 모든 Cloudflare 호출은 서버 사이드 전용, 토큰은 프론트엔드에 절대 전달하지 않음
+- **구현 시 확정 (Phase 3)**: `dns_cache` 테이블은 만들지 않고 PM2/NSSM 상태와 동일하게 매 요청마다 Cloudflare API를 직접 조회한다(개인 운영 대시보드 트래픽량에선 캐싱이 필요 없음). Origin CA 발급 상태 조회는 이번 범위에서 제외 — 로컬 `certs/` 폴더 파싱(§3.5, Phase 0)과 리로드(위 §6.2)만으로 인증서 현황 요구사항은 충분히 커버된다고 보고 후순위로 미룸. **실제 Cloudflare 계정 토큰 없이 구현**했고, Cloudflare API 응답 형식을 그대로 흉내 낸 목 서버로만 요청/응답 처리 로직을 검증했다 — 특히 쓰기 경로(`updateDnsRecord`/`createDnsRecord`)는 실제 토큰으로 한 번 더 확인 후 신뢰할 것.
 
 ### 6.4 배포 워크플로우
 - `simple-git`으로 각 앱 로컬 클론에 대해 `fetch` → `git status --porcelain`(로컬 미커밋 변경 확인) → `git merge --ff-only` 시도
@@ -239,7 +243,9 @@ users(
 - `deploy-commands`(Discord 슬래시 커맨드 재등록) 실행 여부는 `apps.commands_path`(예: `src/commands/`)로 지정된 경로에 diff가 있는지로 판단 — `commands_path`가 비어 있는 앱(슬래시 커맨드가 없는 봇, 웹앱 등)은 이 단계 자체를 건너뛴다
 - 파이프라인: fetch → 로컬 미커밋 변경 확인(있으면 정지 및 확인 요청) → diff 표시(패키지/스키마/커맨드 변경 여부 포함) → (승인) → ff-only merge → 조건부 install/migrate → build → 조건부 deploy-commands → pm2 restart(or nssm restart) → 헬스체크 → pm2 save
 - 각 단계 stdout/stderr를 SSE로 실시간 스트리밍하고 `deploy_logs`에 영구 저장
-- 롤백: 배포 이력에서 이전 커밋 선택 → 동일 파이프라인을 그 커밋 기준으로 재실행
+- 롤백: 배포 이력에서 이전 커밋 선택 → 동일 파이프라인을 그 커밋 기준으로 재실행. `git merge --ff-only`로는 뒤로 돌아갈 수 없으므로(항상 앞으로만 fast-forward) 롤백만 `git reset --hard <커밋>`을 사용 — 서버에 배포된 로컬 체크아웃을 특정 시점으로 되돌리는 게 이 기능의 목적 자체이므로 여기서는 안전하고 의도된 사용
+- **구현 시 확정 (Phase 2)**: 배포 로그 조회/실행 상태는 DB(`deploy_logs`)에 매 단계마다 즉시 기록해 새로고침해도 항상 최신 진행상황이 보이도록 하고, 실시간 스트리밍은 Ops Console 프로세스 내 인메모리 이벤트 버스로 구현(§2에서 이미 전제한 "단일 pm2 인스턴스" 가정과 동일) — 별도 메시지 큐 없이 충분
+- 동시에 같은 앱에 대해 배포가 두 번 실행되는 것(git 저장소/프로세스 경합)은 "이미 진행 중인 배포가 있으면 새 배포를 거부"하는 방식으로 방지
 
 ### 6.5 데이터베이스
 - 최소 권한(SELECT + `information_schema` 조회)의 전용 모니터링 계정으로 `mysql2` 연결
@@ -251,6 +257,8 @@ users(
 - mailcow REST API(`/api/v1/...`, `X-API-Key`)로 도메인/메일박스/DKIM 상태 조회
 - 도메인 추가는 API 호출만 수행하고, **DKIM 키는 절대 직접 생성/복사하지 않음** — mailcow가 자체 생성한 결과만 표시 (기존 원칙 그대로 반영)
 - Docker 컨테이너 상태는 `dockerode` 또는 `docker compose ps` 셸 호출로 조회 (mailcow-dockerized 스택 대상)
+- **구현 시 확정 (Phase 4)**: `dockerode`(Docker API 직접 호출) 대신 `docker compose ps --format json`을 `MAILCOW_COMPOSE_DIR`에서 셸 호출하는 방식을 택함 — NSSM 어댑터가 PowerShell을 셸 호출하는 것과 같은 이유(추가 의존성 없이 이미 서버에 있는 CLI만 사용). 이번 세션엔 실제 mailcow 계정/API 키가 없어 mailcow API 클라이언트는 mailcow 문서 형식을 흉내 낸 목 서버로만 검증했다 — 엔드포인트 경로와 응답 형식은 실제 인스턴스로 재확인 필요. 반면 컨테이너 헬스 조회는 실제 `docker compose`로 더미 스택을 띄워 (healthy/unhealthy/헬스체크 없음 각각) 검증을 마쳤다 — 이 부분은 mailcow가 아니라 Docker Compose 자체의 표준 동작이라 신뢰도가 더 높다.
+- 도메인 추가 시 DKIM은 `add/domain` 성공 뒤 기존 DKIM이 없을 때만 `add/dkim`을 별도 호출하도록 구현 — 두 단계 모두 mailcow 엔드포인트만 호출하고, 어떤 경우에도 DKIM 값 자체를 코드에서 만들어내지 않는다.
 
 ### 6.7 마인크래프트 (NSSM)
 - Windows 서비스이므로 PowerShell(`Get-Service`, `nssm.exe status/start/stop/restart`)을 `child_process`로 호출
@@ -306,9 +314,9 @@ users(
 |---|---|
 | Phase 0 | 앱 레지스트리 + 로그인/2FA + **읽기 전용** 대시보드 (PM2 상태, NSSM 상태, 인증서 만료일, git 로컬/원격 diff만 표시, 제어 기능 없음) |
 | Phase 1 | 제어 기능 추가: pm2/nssm start/stop/restart, 실시간 로그 tail, 감사 로그. (`pm2 reload`의 무중단 롤링 재시작은 cluster 모드 프로세스에서만 의미가 있고 현재 앱들은 fork 모드 컨벤션(§6.1)이라 이번 범위에서 제외 — cluster 모드 앱이 생기면 추가) |
-| Phase 2 | 배포 파이프라인 자동화: 업데이트 확인 → 배포 실행 원클릭, 실행 로그 스트리밍, 배포 이력, 롤백 |
-| Phase 3 | 리버스 프록시 라우팅 CRUD(파일 기반 핫리로드) + Cloudflare DNS 조회/편집 + 인증서 통합 현황 |
-| Phase 4 | mailcow 연동(도메인/DKIM/컨테이너 헬스), 신규 앱 온보딩 마법사(1~4단계 통합) |
+| Phase 2 | 배포 파이프라인 자동화: 업데이트 확인 → 배포 실행 원클릭, 실행 로그 스트리밍, 배포 이력, 롤백. 로컬 미커밋 변경 발견 시 자동 중단(§6.4)은 관리자가 "무시하고 진행" 체크박스로 명시적으로 넘겨야만 통과되도록 구현 |
+| Phase 3 | 리버스 프록시 라우팅 CRUD + Cloudflare DNS 조회/편집 + 인증서 리로드. webproxy는 이 저장소 밖의 별도 코드베이스라 Ops Console은 webproxy가 노출해야 하는 내부 관리 API(§6.2)의 **클라이언트**만 구현하고, webproxy 쪽 반영 방법은 `docs/webproxy-integration.md`에 참고 구현으로 문서화(직접 수정 불가) — 마찬가지로 Cloudflare 연동도 실제 계정 토큰 없이 구현해 Cloudflare API 응답 형식을 흉내 낸 목 서버로만 검증, 프로덕션 반영 전 실제 토큰으로 한 번 더 확인 필요 |
+| Phase 4 | mailcow 연동(도메인/DKIM/컨테이너 헬스), 신규 앱 온보딩 마법사(1~4단계 통합). mailcow도 실제 계정 없이 구현 — 목 서버로 API 응답 형식만 검증, 컨테이너 헬스는 실제 docker compose 스택으로 검증 완료 |
 | Phase 5 | Discord 알림, MySQL 백업 모니터링, 권한 세분화, 모바일 대응 UI |
 
 Phase 0~1은 **읽기+재시작 정도만** 다루기 때문에 리스크가 낮고, 가장 반복적으로 확인하던 정보(지금 뭐가 떠있나, 뭐가 고장났나)를 즉시 줄여준다. 가장 위험한 영역(webproxy 라우팅, DNS, mailcow 도메인 변경)은 의도적으로 Phase 3~4로 미뤄서, 도구 자체의 신뢰도가 쌓인 뒤에 손대도록 순서를 잡았다.

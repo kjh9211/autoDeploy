@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db/prisma";
 import { findPm2Process } from "@/lib/adapters/pm2";
@@ -10,9 +11,13 @@ import { UpdateCheckButton } from "./UpdateCheckButton";
 import { DeleteAppButton } from "./DeleteAppButton";
 import { ControlButtons } from "./ControlButtons";
 import { LogViewer } from "./LogViewer";
+import { DeployButton } from "./DeployButton";
 
 export default async function AppDetailPage(props: PageProps<"/apps/[id]">) {
   const { id } = await props.params;
+  const searchParams = await props.searchParams;
+  const onboardWarning =
+    typeof searchParams.onboardWarning === "string" ? searchParams.onboardWarning : null;
   const app = await prisma.app.findUnique({ where: { id: Number(id) } });
   if (!app) notFound();
 
@@ -29,8 +34,22 @@ export default async function AppDetailPage(props: PageProps<"/apps/[id]">) {
   const detail =
     app.runtime === "pm2" ? (pm2Proc?.status ?? "PM2에 없음") : svcStatus?.ok ? svcStatus.status : svcStatus?.error;
 
+  const recentDeploys = app.localPath
+    ? await prisma.deployLog.findMany({
+        where: { appId: app.id },
+        orderBy: { startedAt: "desc" },
+        take: 5,
+      })
+    : [];
+
   return (
     <div className="flex flex-col gap-8">
+      {onboardWarning && (
+        <div className="rounded-md border border-amber-600/40 p-3 text-sm text-amber-700 dark:text-amber-400">
+          앱은 등록됐지만 온보딩 자동 설정 중 일부가 실패했습니다: {onboardWarning}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">{app.name}</h1>
@@ -69,9 +88,37 @@ export default async function AppDetailPage(props: PageProps<"/apps/[id]">) {
         (app.runtime === "nssm" && app.logPath)) && <LogViewer appId={app.id} />}
 
       {app.localPath && (
-        <section className="flex flex-col gap-3">
+        <section className="flex flex-col gap-4">
           <h2 className="font-medium">배포</h2>
           <UpdateCheckButton appId={app.id} />
+          <DeployButton appId={app.id} />
+
+          {recentDeploys.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h3 className="text-sm font-medium text-black/60 dark:text-white/60">최근 배포</h3>
+              <ul className="flex flex-col gap-1 text-sm">
+                {recentDeploys.map((d) => (
+                  <li key={d.id} className="flex items-center gap-2">
+                    <Link href={`/deploys/${d.id}`} className="underline underline-offset-2">
+                      #{d.id}
+                    </Link>
+                    <span className="text-black/50 dark:text-white/50">
+                      {d.startedAt.toISOString().replace("T", " ").slice(0, 19)}
+                    </span>
+                    {d.status === "running" && (
+                      <span className="text-amber-600 dark:text-amber-400">진행 중</span>
+                    )}
+                    {d.status === "success" && (
+                      <span className="text-emerald-600 dark:text-emerald-400">성공</span>
+                    )}
+                    {d.status === "failed" && (
+                      <span className="text-red-600 dark:text-red-400">실패</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
 
@@ -91,6 +138,11 @@ export default async function AppDetailPage(props: PageProps<"/apps/[id]">) {
             branch: app.branch ?? undefined,
             domain: app.domain ?? undefined,
             logPath: app.logPath ?? undefined,
+            buildCmd: app.buildCmd ?? undefined,
+            migrateCmd: app.migrateCmd ?? undefined,
+            deployCommandsCmd: app.deployCommandsCmd ?? undefined,
+            commandsPath: app.commandsPath ?? undefined,
+            healthcheckUrl: app.healthcheckUrl ?? undefined,
             notes: app.notes ?? undefined,
           }}
         />

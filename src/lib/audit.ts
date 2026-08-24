@@ -6,7 +6,7 @@ import type { $Enums } from "@/generated/prisma/client";
 export async function recordAudit(entry: {
   actorEmail: string;
   action: $Enums.AuditAction;
-  appId: number;
+  appId: number | null;
   appName: string;
   success: boolean;
   detail?: string;

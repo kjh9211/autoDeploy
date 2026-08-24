@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { listCerts } from "@/lib/adapters/certs";
 import { config } from "@/lib/config";
+import { ReloadCertsButton } from "./ReloadCertsButton";
 
 function formatDate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -10,10 +12,23 @@ export default async function CertsPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">인증서 현황</h1>
+          <p className="text-sm text-black/50 dark:text-white/50 mt-1">
+            {config.CERTS_DIR} — 만료일이 가까운 순
+          </p>
+        </div>
+        <Link href="/proxy" className="text-sm underline underline-offset-2">
+          라우팅 관리
+        </Link>
+      </div>
+
       <div>
-        <h1 className="text-xl font-semibold">인증서 현황</h1>
-        <p className="text-sm text-black/50 dark:text-white/50 mt-1">
-          {config.CERTS_DIR} — 만료일이 가까운 순
+        <ReloadCertsButton />
+        <p className="mt-1 text-xs text-black/50 dark:text-white/50">
+          이 폴더의 인증서 파일을 바꾼 뒤에는 반드시 눌러야 webproxy가 다시 읽습니다 —
+          라우팅 변경과는 별개 메커니즘입니다(docs/PLANNING.md §6.2).
         </p>
       </div>
 

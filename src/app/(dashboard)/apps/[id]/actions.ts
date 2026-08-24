@@ -5,37 +5,16 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import type { $Enums } from "@/generated/prisma/client";
+import { appFormBaseSchema, withRuntimeRefinements } from "@/lib/appFormSchema";
 import { checkForAppUpdates, type GitUpdateCheck } from "@/lib/adapters/git";
 import { controlPm2Process } from "@/lib/adapters/pm2";
 import { controlWindowsService } from "@/lib/adapters/nssm";
 import { requireSessionUser } from "@/lib/auth/guard";
 import { recordAudit } from "@/lib/audit";
 
-const emptyToUndefined = (v: unknown) =>
-  typeof v === "string" && v.trim() === "" ? undefined : v;
-
-const schema = z
-  .object({
-    id: z.coerce.number().int().positive(),
-    name: z.string().trim().min(1, "이름을 입력해 주세요."),
-    type: z.enum(["node_app", "static_web", "discord_bot", "minecraft"]),
-    runtime: z.enum(["pm2", "nssm"]),
-    pm2Name: z.preprocess(emptyToUndefined, z.string().optional()),
-    nssmService: z.preprocess(emptyToUndefined, z.string().optional()),
-    localPath: z.preprocess(emptyToUndefined, z.string().optional()),
-    branch: z.preprocess(emptyToUndefined, z.string().optional()),
-    domain: z.preprocess(emptyToUndefined, z.string().optional()),
-    logPath: z.preprocess(emptyToUndefined, z.string().optional()),
-    notes: z.preprocess(emptyToUndefined, z.string().optional()),
-  })
-  .refine((v) => (v.runtime === "pm2" ? !!v.pm2Name : true), {
-    message: "PM2로 관리되는 앱은 pm2 프로세스 이름이 필요합니다.",
-    path: ["pm2Name"],
-  })
-  .refine((v) => (v.runtime === "nssm" ? !!v.nssmService : true), {
-    message: "NSSM으로 관리되는 앱은 서비스 이름이 필요합니다.",
-    path: ["nssmService"],
-  });
+const schema = withRuntimeRefinements(
+  appFormBaseSchema.extend({ id: z.coerce.number().int().positive() }),
+);
 
 export type UpdateAppState = { error: string } | null;
 

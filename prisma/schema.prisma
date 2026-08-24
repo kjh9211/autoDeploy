@@ -1,8 +1,11 @@
 // Ops Console data model — tables are added as the phase that needs them
 // (docs/PLANNING.md §9) is built, not all up front. Phase 0 added User/App;
-// Phase 1 adds AuditLog for control actions. deploy_logs / dns_cache / certs
-// from docs/PLANNING.md §5 are still deferred — PM2/NSSM status, cert
-// expiry, and git diff are read live from the adapters, not cached in the DB.
+// Phase 1 added AuditLog for control actions; Phase 2 added DeployLog and the
+// App fields the deploy pipeline needs. Phase 3 (webproxy routes, Cloudflare
+// DNS) adds no tables at all — both are read live from their adapters, same
+// as PM2/NSSM status and cert expiry, and only route/DNS *changes* land in
+// AuditLog. docs/PLANNING.md §5's dns_cache is deliberately skipped for the
+// same reason PM2/NSSM state was never cached.
 
 generator client {
   provider = "prisma-client"
@@ -71,6 +74,20 @@ model App {
   // bus instead and don't need this.
   logPath     String?
 
+  // Deploy pipeline (Phase 2, §6.4) — all optional because a step only runs
+  // when the corresponding command/path is configured. Values are entered
+  // once by the admin registering the app (same trust level as them typing
+  // these same commands by hand today), not attacker-reachable input.
+  buildCmd          String?
+  migrateCmd        String?
+  deployCommandsCmd String?
+  // Path prefix (relative to localPath) whose changes trigger deployCommandsCmd,
+  // e.g. "src/commands" — mirrors the package.json/schema.sql diff checks.
+  commandsPath      String?
+  // Optional HTTP health check hit right after restart, before `pm2 save`.
+  // Apps without an HTTP surface (Discord bots) just skip this step.
+  healthcheckUrl    String?
+
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -81,6 +98,13 @@ enum AuditAction {
   app_start
   app_stop
   app_restart
+  app_deploy
+  app_rollback
+  proxy_route_change
+  proxy_certs_reload
+  dns_record_change
+  mail_domain_add
+  onboard_app
 }
 
 /// Every control action (docs/PLANNING.md §7 — "위험한 작업에 대한 감사 로그").
@@ -96,4 +120,35 @@ model AuditLog {
   createdAt  DateTime    @default(now())
 
   @@map("audit_log")
+}
+
+enum DeployTriggerMode {
+  update
+  rollback
+}
+
+enum DeployStatus {
+  running
+  success
+  failed
+}
+
+/// One row per pipeline run (docs/PLANNING.md §6.4/§9). `stepsJson` is the
+/// full step-by-step record (name/status/output) — updated as each step
+/// finishes so a page refresh always reflects current progress even without
+/// the live SSE stream (src/lib/deploy/events.ts) connected.
+model DeployLog {
+  id          Int               @id @default(autoincrement())
+  appId       Int
+  appName     String
+  triggeredBy String
+  mode        DeployTriggerMode
+  fromCommit  String?
+  toCommit    String?
+  status      DeployStatus      @default(running)
+  stepsJson   String            @db.Text
+  startedAt   DateTime          @default(now())
+  finishedAt  DateTime?
+
+  @@map("deploy_logs")
 }

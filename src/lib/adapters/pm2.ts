@@ -113,3 +113,20 @@ export async function controlPm2Process(
     disconnect();
   }
 }
+
+// `pm2 save` — the last step of the deploy pipeline (docs/PLANNING.md §6.4),
+// run only after a successful restart (+ healthcheck, if configured) so a
+// broken deploy never becomes what `pm2 resurrect` restores on reboot.
+export async function savePm2ProcessList(): Promise<Pm2ControlResult> {
+  try {
+    await connect();
+    await new Promise<void>((resolve, reject) => {
+      pm2.dump((err) => (err ? reject(err) : resolve()));
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    disconnect();
+  }
+}
