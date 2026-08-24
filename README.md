@@ -43,7 +43,7 @@ npx prisma migrate deploy
 npx prisma generate
 ```
 
-를 실행하고 나서 앱을 재시작할 것 (`npm run dev` 또는 `pm2 restart ops-console`).
+를 실행하고 나서 앱을 재시작할 것 (`npm run dev` 또는 `pm2 restart ops-console`). (프로덕션에서 아래 "자동 업데이트로 배포"를 쓰고 있다면 이 과정은 `run.js`가 알아서 하므로 신경 쓸 필요 없다 — 로컬 개발 환경에는 여전히 해당된다.)
 
 ### 환경 변수
 
@@ -67,7 +67,22 @@ pm2 start node_modules/next/dist/bin/next --name ops-console --interpreter node 
 pm2 save
 ```
 
-webproxy에 `ops.<domain>` 같은 서브도메인 라우팅을 추가해 이 포트로 연결하면 된다.
+webproxy에 `ops.<domain>` 같은 서브도메인 라우팅을 추가해 이 포트로 연결하면 된다. 최초 설정이나 문제 상황 디버깅용으로는 이 방식을 그대로 쓰고, 평소 운영은 아래 "자동 업데이트"로 띄우는 걸 권장한다.
+
+### 자동 업데이트로 배포 (권장)
+
+`main`에 새 커밋이 올라올 때마다 서버에 직접 들어가서 `git pull` → `prisma migrate deploy`/`generate` → `npm run build` → 재시작을 손으로 해줘야 하는 게 반복되는 실수 지점이었다(예: 재생성을 빼먹고 재시작해서 `prisma.deployLog`가 `undefined`가 되는 오류). `run.js`는 이 전체 과정을 자체 프로세스 안에서 반복한다 — 자체 제작 npm 패키지 [`@kjh9211/autoupdate`](https://www.npmjs.com/package/@kjh9211/autoupdate)로 `main`을 주기적으로 fetch해서 새 커밋이 있으면 pull하고, `scripts/ensure-built.js`로 마이그레이션/빌드를 실행한 뒤, 다음 정각/30분에 재시작한다.
+
+```powershell
+PORT=<port> pm2 start run.js --name ops-console --interpreter node
+pm2 save
+```
+
+- `scripts/ensure-built.js`는 "현재 git HEAD 커밋으로 이미 빌드됐는지"를 `.next/OPS_CONSOLE_BUILT_SHA`로 확인한다. 아니면 `prisma migrate deploy` → `prisma generate` → `next build` 순으로 실행하고 마커를 갱신한다. `npm`/`npx` 같은 `.cmd` 래퍼를 거치지 않고 항상 `node_modules` 안의 실제 `.js` 엔트리를 `node`로 직접 실행한다(PM2와 얽혀 문제가 생긴 전례가 있어서 — 위 "프로덕션 배포" 절과 동일한 이유).
+- 이 확인은 두 곳에서 실행된다: (1) 새 커밋을 pull한 직후(`onUpdate` 콜백, 빠른 경로) — 재시작 전에 미리 빌드를 끝내 두어 다운타임을 줄인다. (2) 실제로 재시작해서 앱을 spawn하기 직전(`startScript` 자체, 안전망) — 만약 (1)이 예정된 재시작 시각 전에 못 끝났어도(빌드가 오래 걸리는 경우) 여기서 한 번 더 걸러져서, 절대 안 맞는 커밋으로 서버가 뜨는 일이 없다.
+- 마이그레이션/빌드가 실패하면 `&&`로 묶여 있어 그 시도의 `next start` 자체가 실행되지 않고 프로세스가 비정상 종료된다 — 깨진 코드로 조용히 뜨는 대신 크래시 후 백오프 재시도(`maxRestarts`, 기본 10회)로 넘어간다. 계속 실패하면(예: main에 실제 빌드 에러가 들어간 경우) 재시도를 포기하고 멈추므로 수동 확인이 필요하다.
+- **`prisma migrate deploy`가 사람 확인 없이 자동 실행된다는 뜻이다.** `migrate deploy`는 이미 저장소에 커밋된 마이그레이션 파일만 순서대로 적용하는 명령이라(새 마이그레이션을 그 자리에서 생성하지 않음) 스키마 변경 자체는 PR 리뷰 시점에 이미 확정돼 있지만, "머지되면 곧 실제 운영 DB에 적용된다"는 걸 감안하고 써야 한다.
+- 크래시가 반복돼 `autoupdate`가 재시도를 포기하면 `run.js` 프로세스 자체가 종료되므로, PM2가 마지막 안전망으로 `run.js`를 다시 띄운다(부팅 시점에도 `ensure-built`를 한 번 더 확인).
 
 ### 마인크래프트(NSSM) 서비스 제어 권한 설정
 
