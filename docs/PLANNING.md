@@ -111,6 +111,8 @@
 3. 도메인 정보 (서브도메인, 대상 존, orange/grey cloud 여부, Host 헤더 유지 필요 여부 체크박스) → DNS 레코드 미리보기 후 생성
 4. 요약 확인 → 생성 (PM2 ecosystem 항목 생성 + webproxy 라우트 파일 반영 + Cloudflare A레코드 생성)
 
+**구현 시 확정 (Phase 4)**: 위 4단계 마법사 대신, 기존 `/apps/new` 폼(§3.3 초안 이전부터 있던 앱 등록 폼)에 "배포 인프라 자동 설정" 섹션(webproxy 라우팅 생성 여부 체크박스 + 포트/Host헤더유지, Cloudflare DNS 생성 여부 체크박스 + 존/orange-cloud)을 추가하는 형태로 단순화했다. 별도 미리보기·요약 단계나 PM2 ecosystem 파일 자동 생성, 프레임워크별 `start_cmd` 자동완성은 이번 범위에서 제외 — 한 화면 폼으로도 "앱 등록 + 라우팅 + DNS"를 한 번에 끝내는 목적은 달성되고, PM2 자체 등록은 여전히 관리자가 서버에서 `pm2 start`로 직접 하는 영역이라(Ops Console은 이미 떠 있는 프로세스를 조회/제어할 뿐, 새 프로세스를 원격으로 기동하는 기능은 없음) 자동화 대상이 아니다. 각 단계는 best-effort로 실행되어 webproxy/DNS 생성이 실패해도 앱 등록 자체는 그대로 성공 처리되고, 실패 내용은 리다이렉트된 앱 상세 화면에 경고로 표시된다.
+
 ### 3.4 프록시 라우팅 관리 (`/proxy`)
 - 테이블: Host 헤더 → 대상 포트, 유형(프록시 / 302 리다이렉트 / Host 헤더 유지 특수케이스), 담당 앱
 - 신규/수정/삭제는 코드 직접 수정이 아니라 **라우트 설정 파일(JSON)** 을 통해 이루어지고, webproxy가 이를 자동 리로드 (§6.2)
@@ -255,6 +257,8 @@ users(
 - mailcow REST API(`/api/v1/...`, `X-API-Key`)로 도메인/메일박스/DKIM 상태 조회
 - 도메인 추가는 API 호출만 수행하고, **DKIM 키는 절대 직접 생성/복사하지 않음** — mailcow가 자체 생성한 결과만 표시 (기존 원칙 그대로 반영)
 - Docker 컨테이너 상태는 `dockerode` 또는 `docker compose ps` 셸 호출로 조회 (mailcow-dockerized 스택 대상)
+- **구현 시 확정 (Phase 4)**: `dockerode`(Docker API 직접 호출) 대신 `docker compose ps --format json`을 `MAILCOW_COMPOSE_DIR`에서 셸 호출하는 방식을 택함 — NSSM 어댑터가 PowerShell을 셸 호출하는 것과 같은 이유(추가 의존성 없이 이미 서버에 있는 CLI만 사용). 이번 세션엔 실제 mailcow 계정/API 키가 없어 mailcow API 클라이언트는 mailcow 문서 형식을 흉내 낸 목 서버로만 검증했다 — 엔드포인트 경로와 응답 형식은 실제 인스턴스로 재확인 필요. 반면 컨테이너 헬스 조회는 실제 `docker compose`로 더미 스택을 띄워 (healthy/unhealthy/헬스체크 없음 각각) 검증을 마쳤다 — 이 부분은 mailcow가 아니라 Docker Compose 자체의 표준 동작이라 신뢰도가 더 높다.
+- 도메인 추가 시 DKIM은 `add/domain` 성공 뒤 기존 DKIM이 없을 때만 `add/dkim`을 별도 호출하도록 구현 — 두 단계 모두 mailcow 엔드포인트만 호출하고, 어떤 경우에도 DKIM 값 자체를 코드에서 만들어내지 않는다.
 
 ### 6.7 마인크래프트 (NSSM)
 - Windows 서비스이므로 PowerShell(`Get-Service`, `nssm.exe status/start/stop/restart`)을 `child_process`로 호출
@@ -312,7 +316,7 @@ users(
 | Phase 1 | 제어 기능 추가: pm2/nssm start/stop/restart, 실시간 로그 tail, 감사 로그. (`pm2 reload`의 무중단 롤링 재시작은 cluster 모드 프로세스에서만 의미가 있고 현재 앱들은 fork 모드 컨벤션(§6.1)이라 이번 범위에서 제외 — cluster 모드 앱이 생기면 추가) |
 | Phase 2 | 배포 파이프라인 자동화: 업데이트 확인 → 배포 실행 원클릭, 실행 로그 스트리밍, 배포 이력, 롤백. 로컬 미커밋 변경 발견 시 자동 중단(§6.4)은 관리자가 "무시하고 진행" 체크박스로 명시적으로 넘겨야만 통과되도록 구현 |
 | Phase 3 | 리버스 프록시 라우팅 CRUD + Cloudflare DNS 조회/편집 + 인증서 리로드. webproxy는 이 저장소 밖의 별도 코드베이스라 Ops Console은 webproxy가 노출해야 하는 내부 관리 API(§6.2)의 **클라이언트**만 구현하고, webproxy 쪽 반영 방법은 `docs/webproxy-integration.md`에 참고 구현으로 문서화(직접 수정 불가) — 마찬가지로 Cloudflare 연동도 실제 계정 토큰 없이 구현해 Cloudflare API 응답 형식을 흉내 낸 목 서버로만 검증, 프로덕션 반영 전 실제 토큰으로 한 번 더 확인 필요 |
-| Phase 4 | mailcow 연동(도메인/DKIM/컨테이너 헬스), 신규 앱 온보딩 마법사(1~4단계 통합) |
+| Phase 4 | mailcow 연동(도메인/DKIM/컨테이너 헬스), 신규 앱 온보딩 마법사(1~4단계 통합). mailcow도 실제 계정 없이 구현 — 목 서버로 API 응답 형식만 검증, 컨테이너 헬스는 실제 docker compose 스택으로 검증 완료 |
 | Phase 5 | Discord 알림, MySQL 백업 모니터링, 권한 세분화, 모바일 대응 UI |
 
 Phase 0~1은 **읽기+재시작 정도만** 다루기 때문에 리스크가 낮고, 가장 반복적으로 확인하던 정보(지금 뭐가 떠있나, 뭐가 고장났나)를 즉시 줄여준다. 가장 위험한 영역(webproxy 라우팅, DNS, mailcow 도메인 변경)은 의도적으로 Phase 3~4로 미뤄서, 도구 자체의 신뢰도가 쌓인 뒤에 손대도록 순서를 잡았다.

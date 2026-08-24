@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: "/deploys", label: "배포" },
   { href: "/proxy", label: "프록시" },
   { href: "/dns", label: "DNS" },
+  { href: "/mail", label: "메일" },
   { href: "/audit", label: "감사 로그" },
 ];
 

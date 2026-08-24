@@ -3,12 +3,14 @@
 Windows 서버(PM2 · 리버스 프록시 · Cloudflare · MySQL · mailcow · 마인크래프트 NSSM)의 배포 구조를 한 화면에서 조회·통제하는 관리자 콘솔.
 
 - 기획서: [`docs/PLANNING.md`](docs/PLANNING.md)
-- 현재 구현 범위: **Phase 0 + Phase 1 + Phase 2 + Phase 3** (docs/PLANNING.md §9)
+- 현재 구현 범위: **Phase 0~4 전체** (docs/PLANNING.md §9) — 기획서의 모든 단계가 구현되어 있음
   - Phase 0: 앱 레지스트리, 로그인+2FA, PM2/NSSM 상태·인증서 만료일·git 로컬/원격 diff를 보여주는 읽기 전용 대시보드
   - Phase 1: 앱 시작/중지/재시작, PM2 로그 실시간 스트리밍(NSSM은 로그 파일 경로를 등록하면 동일하게 지원), 모든 제어 작업의 감사 로그(`/audit`)
   - Phase 2: 배포 파이프라인 자동화 — "배포 실행" 한 번으로 fetch → 병합 → (필요시) install/마이그레이션/빌드/슬래시커맨드 배포 → 재시작 → 헬스체크 → `pm2 save`까지 실행, 단계별 실시간 로그(`/deploys/[id]`), 배포 이력(`/deploys`), 이전 배포 시점으로 롤백
   - Phase 3: 리버스 프록시 라우팅 관리(`/proxy`) + 인증서 리로드 + Cloudflare DNS 조회/편집(`/dns`, 오리진 IP 불일치·`mail.*` orange-cloud 오류 강조). **webproxy 쪽 연동은 별도 적용이 필요** — 아래 "webproxy 연동" 절 참고. Cloudflare 연동은 실제 토큰 없이 구현해 목 서버로만 검증했으니 실제 토큰으로 한 번 더 확인할 것
-  - mailcow 연동은 이후 단계(Phase 4)
+  - Phase 4: mailcow 연동(`/mail` — 도메인/DKIM 현황, `docker compose ps` 기반 컨테이너 헬스, 도메인 추가 시 mailcow 자체 DKIM 생성) + 신규 앱 온보딩(앱 등록과 동시에 webproxy 라우팅·Cloudflare DNS 생성, `/apps/new`). mailcow API도 실제 계정 없이 목 서버로만 검증 — 실제 인스턴스로 재확인 권장. 컨테이너 헬스 조회는 실제 `docker compose`로 검증 완료
+
+각 Phase에서 실제로 이 저장소 밖의 것(webproxy, Cloudflare, mailcow)에 의존하는 기능은 전부 "설정 안 하면 안내만 표시, 다른 기능엔 영향 없음"으로 동작한다 — 아래 환경 변수를 하나도 안 채워도 Phase 0~2 기능은 그대로 쓸 수 있다.
 
 ## 요구사항
 
@@ -42,6 +44,7 @@ npm run dev   # http://localhost:3000
 | `DUMP_PM2_PATH` | `pm2 save`가 쓰는 `dump.pm2` 경로 |
 | `WEBPROXY_ADMIN_URL` / `WEBPROXY_ADMIN_TOKEN` | (선택) webproxy 내부 관리 API. 아래 "webproxy 연동" 참고 — 없어도 `/proxy`는 안내만 표시하고 나머지 기능엔 영향 없음 |
 | `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ZONES` / `ORIGIN_IP` | (선택) Cloudflare DNS 연동. `CLOUDFLARE_ZONES`는 콤마로 구분한 존 이름 목록 (예: `kjh9211.kr,noahsoft.kr`). 없어도 `/dns`는 안내만 표시 |
+| `MAILCOW_API_URL` / `MAILCOW_API_KEY` / `MAILCOW_COMPOSE_DIR` | (선택) mailcow 연동. API URL/키는 mailcow 자체 REST API용, COMPOSE_DIR은 컨테이너 헬스 조회(`docker compose ps`)용 mailcow docker-compose 프로젝트 경로. 없어도 `/mail`은 안내만 표시 |
 
 ## 프로덕션 배포 (Windows, PM2)
 
@@ -86,6 +89,14 @@ sc.exe sdset <서비스이름> "D:(A;;RPWPLCRC;;;$sid)<...기존 DACL 나머지.
 ### DNS 확인 규칙
 
 `/dns`는 두 가지만 자동으로 강조한다: (1) A레코드 값이 `ORIGIN_IP`와 다른 경우, (2) `mail.`로 시작하는 레코드인데 orange-cloud(proxied)인 경우. 그 외의 경우는 경고를 띄우지 않는다 — 의도적으로 grey-cloud를 쓰는 레코드가 있을 수 있어서다.
+
+### mailcow 연동
+
+`/mail`은 두 가지 서로 다른 소스를 합쳐서 보여준다: 도메인/메일박스/DKIM 현황은 mailcow 자체 REST API(`MAILCOW_API_URL`/`MAILCOW_API_KEY`)로, 컨테이너 헬스는 mailcow가 Docker(docker-compose)로 떠 있다는 전제 하에 `MAILCOW_COMPOSE_DIR`에서 `docker compose ps --all --format json`을 직접 실행해서 얻는다 — mailcow API에는 컨테이너 단위 헬스 엔드포인트가 없어서다. 도메인 추가 시 DKIM 값은 이 콘솔이 직접 만들지 않고, 항상 mailcow가 `/api/v1/add/dkim` 호출로 스스로 생성한 값만 그대로 읽어 보여준다. mailcow API는 실제 계정 없이 목 서버로만 검증했으니(docs/PLANNING.md §9), 실제 인스턴스에 붙이기 전에 도메인 추가 흐름을 한 번 확인할 것.
+
+### 신규 앱 온보딩
+
+`/apps/new`에서 앱을 등록할 때 "webproxy 라우팅 자동 생성"과 "Cloudflare DNS 레코드 자동 생성" 체크박스를 켜면, 앱 등록과 동시에 webproxy 라우팅(Phase 3 API)과 Cloudflare A레코드(Phase 3 API)를 이어서 시도한다. 앱 등록 자체는 항상 성공하며, 이후 인프라 단계가 실패해도 앱 row를 롤백하지 않고 "best-effort"로 동작한다 — 실패한 항목은 앱 상세 페이지 상단에 경고 배너로 표시되고, 감사 로그(`/audit`, `onboard_app`)에도 성공/실패 여부와 상세 사유가 남는다.
 
 ## 스크립트
 

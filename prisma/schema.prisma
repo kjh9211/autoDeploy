@@ -103,6 +103,8 @@ enum AuditAction {
   proxy_route_change
   proxy_certs_reload
   dns_record_change
+  mail_domain_add
+  onboard_app
 }
 
 /// Every control action (docs/PLANNING.md §7 — "위험한 작업에 대한 감사 로그").

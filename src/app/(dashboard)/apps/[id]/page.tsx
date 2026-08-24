@@ -15,6 +15,9 @@ import { DeployButton } from "./DeployButton";
 
 export default async function AppDetailPage(props: PageProps<"/apps/[id]">) {
   const { id } = await props.params;
+  const searchParams = await props.searchParams;
+  const onboardWarning =
+    typeof searchParams.onboardWarning === "string" ? searchParams.onboardWarning : null;
   const app = await prisma.app.findUnique({ where: { id: Number(id) } });
   if (!app) notFound();
 
@@ -41,6 +44,12 @@ export default async function AppDetailPage(props: PageProps<"/apps/[id]">) {
 
   return (
     <div className="flex flex-col gap-8">
+      {onboardWarning && (
+        <div className="rounded-md border border-amber-600/40 p-3 text-sm text-amber-700 dark:text-amber-400">
+          앱은 등록됐지만 온보딩 자동 설정 중 일부가 실패했습니다: {onboardWarning}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">{app.name}</h1>

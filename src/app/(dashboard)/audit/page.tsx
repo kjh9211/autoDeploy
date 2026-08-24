@@ -9,6 +9,8 @@ const ACTION_LABEL: Record<string, string> = {
   proxy_route_change: "프록시 라우트 변경",
   proxy_certs_reload: "인증서 리로드",
   dns_record_change: "DNS 레코드 변경",
+  mail_domain_add: "메일 도메인 추가",
+  onboard_app: "신규 앱 온보딩",
 };
 
 function formatTimestamp(d: Date) {

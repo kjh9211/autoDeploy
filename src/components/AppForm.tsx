@@ -34,10 +34,14 @@ export function AppForm({
   action,
   defaults,
   submitLabel,
+  extraFields,
 }: {
   action: AppFormAction;
   defaults?: AppFormDefaults;
   submitLabel: string;
+  // Slot for /apps/new's onboarding-wizard fields (docs/PLANNING.md §3.3) —
+  // only meaningful at creation time, so edit forms just omit it.
+  extraFields?: React.ReactNode;
 }) {
   const [state, formAction, pending] = useActionState<AppFormState, FormData>(
     action,
@@ -225,6 +229,8 @@ export function AppForm({
           className={inputClass}
         />
       </label>
+
+      {extraFields}
 
       {state?.error && (
         <p className="text-sm text-red-600 dark:text-red-400" role="alert">
