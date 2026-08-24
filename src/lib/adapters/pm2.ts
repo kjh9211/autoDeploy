@@ -20,6 +20,7 @@ export type Pm2ProcessInfo = {
   restarts: number | null;
   execInterpreter: string | null;
   execPath: string | null;
+  cwd: string | null;
   // Whether it follows docs/PLANNING.md §6.1: `--interpreter node` + a real
   // .js entry, rather than pm2 trying to run a Windows .cmd shim directly.
   followsWindowsConvention: boolean;
@@ -56,6 +57,7 @@ function normalize(proc: pm2.ProcessDescription): Pm2ProcessInfo {
     restarts: env?.restart_time ?? null,
     execInterpreter,
     execPath,
+    cwd: env?.pm_cwd ?? null,
     followsWindowsConvention:
       execInterpreter === "node" && !!execPath?.endsWith(".js"),
   };

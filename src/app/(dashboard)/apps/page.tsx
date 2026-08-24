@@ -16,12 +16,20 @@ export default async function AppsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">앱</h1>
-        <Link
-          href="/apps/new"
-          className="rounded-md bg-foreground text-background px-3 py-1.5 text-sm font-medium"
-        >
-          새 앱 등록
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/apps/new/from-pm2"
+            className="rounded-md border border-black/15 dark:border-white/20 px-3 py-1.5 text-sm font-medium"
+          >
+            PM2에서 가져오기
+          </Link>
+          <Link
+            href="/apps/new"
+            className="rounded-md bg-foreground text-background px-3 py-1.5 text-sm font-medium"
+          >
+            새 앱 등록
+          </Link>
+        </div>
       </div>
 
       {pm2Error && (
