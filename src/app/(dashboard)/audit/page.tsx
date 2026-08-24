@@ -4,6 +4,8 @@ const ACTION_LABEL: Record<string, string> = {
   app_start: "시작",
   app_stop: "중지",
   app_restart: "재시작",
+  app_deploy: "배포",
+  app_rollback: "롤백",
 };
 
 function formatTimestamp(d: Date) {
@@ -21,7 +23,7 @@ export default async function AuditLogPage() {
       <div>
         <h1 className="text-xl font-semibold">감사 로그</h1>
         <p className="text-sm text-black/50 dark:text-white/50 mt-1">
-          최근 200건 · 재시작/중지/시작 등 제어 작업만 기록됩니다.
+          최근 200건 · 재시작/중지/시작/배포/롤백 등 제어 작업만 기록됩니다.
         </p>
       </div>
 

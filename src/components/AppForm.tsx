@@ -19,6 +19,11 @@ export type AppFormDefaults = {
   branch?: string;
   domain?: string;
   logPath?: string;
+  buildCmd?: string;
+  migrateCmd?: string;
+  deployCommandsCmd?: string;
+  commandsPath?: string;
+  healthcheckUrl?: string;
   notes?: string;
 };
 
@@ -140,6 +145,65 @@ export function AppForm({
           className={inputClass}
         />
       </label>
+
+      <fieldset className="flex flex-col gap-4 rounded-md border border-black/10 dark:border-white/10 p-3">
+        <legend className="px-1 text-sm font-medium">배포 설정 (로컬 git 경로가 있을 때만 사용)</legend>
+
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">빌드 명령 (선택)</span>
+          <input
+            type="text"
+            name="buildCmd"
+            defaultValue={defaults?.buildCmd}
+            placeholder="예: npm run build"
+            className={inputClass}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">DB 마이그레이션 명령 (선택)</span>
+          <input
+            type="text"
+            name="migrateCmd"
+            defaultValue={defaults?.migrateCmd}
+            placeholder="schema.sql이 바뀐 커밋을 배포할 때만 실행됨"
+            className={inputClass}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">슬래시 커맨드 배포 명령 (선택)</span>
+          <input
+            type="text"
+            name="deployCommandsCmd"
+            defaultValue={defaults?.deployCommandsCmd}
+            placeholder="예: node deploy-commands.js"
+            className={inputClass}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">슬래시 커맨드 경로 (선택)</span>
+          <input
+            type="text"
+            name="commandsPath"
+            defaultValue={defaults?.commandsPath}
+            placeholder="예: src/commands — 이 경로 변경 시에만 위 명령 실행"
+            className={inputClass}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="font-medium">헬스체크 URL (선택)</span>
+          <input
+            type="text"
+            name="healthcheckUrl"
+            defaultValue={defaults?.healthcheckUrl}
+            placeholder="재시작 후 확인할 URL — 없으면 이 단계는 건너뜀"
+            className={inputClass}
+          />
+        </label>
+      </fieldset>
 
       <label className="flex flex-col gap-1 text-sm">
         <span className="font-medium">도메인 (선택)</span>
