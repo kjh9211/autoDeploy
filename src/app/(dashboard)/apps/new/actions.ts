@@ -95,3 +95,38 @@ export async function createApp(
   const query = warnings.length > 0 ? `?onboardWarning=${encodeURIComponent(warnings.join(" / "))}` : "";
   redirect(`/apps/${created.id}${query}`);
 }
+
+// One-click registration from /apps/new/from-pm2 (docs/PLANNING.md §3.3) — for
+// an app that's already running under PM2, name/pm2Name/localPath are known
+// from PM2 itself, so there's no form to fill in. Everything else (domain,
+// deploy commands, ...) is left for the admin to add afterward on the app's
+// own edit page.
+export async function createAppFromPm2(formData: FormData): Promise<void> {
+  const pm2Name = String(formData.get("pm2Name") || "");
+  if (!pm2Name) {
+    redirect(`/apps/new/from-pm2?error=${encodeURIComponent("PM2 프로세스 이름이 없습니다.")}`);
+  }
+
+  const cwd = formData.get("cwd");
+  const localPath = typeof cwd === "string" && cwd ? cwd : null;
+
+  let created: { id: number };
+  try {
+    created = await prisma.app.create({
+      data: {
+        name: pm2Name,
+        type: "node_app",
+        runtime: "pm2",
+        pm2Name,
+        localPath,
+        branch: "main",
+      },
+    });
+  } catch {
+    redirect(
+      `/apps/new/from-pm2?error=${encodeURIComponent(`이미 "${pm2Name}"라는 이름의 앱이 등록되어 있습니다.`)}`,
+    );
+  }
+
+  redirect(`/apps/${created.id}`);
+}

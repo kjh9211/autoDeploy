@@ -34,6 +34,17 @@ OPS_ADMIN_EMAIL=you@example.com OPS_ADMIN_PASSWORD='최소 12자' npx prisma db 
 npm run dev   # http://localhost:3000
 ```
 
+### 코드를 새로 받았을 때 (git pull 이후)
+
+`src/generated/prisma`(생성된 Prisma Client)는 git에 커밋되지 않는다. 스키마를 바꾸는 커밋을 받은 뒤 재생성 없이 그대로 서버를 재시작하면 새로 추가된 모델에 대해 `prisma.xxx`가 `undefined`가 되어 `Cannot read properties of undefined (reading 'findMany')` 같은 오류가 난다. `git pull` 후에는 항상:
+
+```bash
+npx prisma migrate deploy
+npx prisma generate
+```
+
+를 실행하고 나서 앱을 재시작할 것 (`npm run dev` 또는 `pm2 restart ops-console`).
+
 ### 환경 변수
 
 | 변수 | 설명 |
@@ -97,6 +108,10 @@ sc.exe sdset <서비스이름> "D:(A;;RPWPLCRC;;;$sid)<...기존 DACL 나머지.
 ### 신규 앱 온보딩
 
 `/apps/new`에서 앱을 등록할 때 "webproxy 라우팅 자동 생성"과 "Cloudflare DNS 레코드 자동 생성" 체크박스를 켜면, 앱 등록과 동시에 webproxy 라우팅(Phase 3 API)과 Cloudflare A레코드(Phase 3 API)를 이어서 시도한다. 앱 등록 자체는 항상 성공하며, 이후 인프라 단계가 실패해도 앱 row를 롤백하지 않고 "best-effort"로 동작한다 — 실패한 항목은 앱 상세 페이지 상단에 경고 배너로 표시되고, 감사 로그(`/audit`, `onboard_app`)에도 성공/실패 여부와 상세 사유가 남는다.
+
+### PM2에서 앱 가져오기
+
+`/apps/new/from-pm2`는 이미 PM2로 떠 있지만 아직 등록되지 않은 프로세스(등록된 앱의 `pm2Name`과 겹치지 않는 것)를 `pm2 list`로 조회해 목록으로 보여준다. "이 프로세스 등록" 버튼 한 번이면 이름·PM2 프로세스명·로컬 경로(PM2의 작업 디렉터리)가 PM2에서 읽은 값 그대로 채워진 앱 row가 만들어지고, 곧바로 그 앱의 상세 페이지로 이동한다 — 도메인·배포 명령 등 나머지 항목은 거기서 채우면 된다. PM2 프로세스 이름과 같은 이름의 앱이 이미 있으면(이름 중복) 등록을 거부하고 오류를 보여준다. `.cmd` 등 비표준 방식으로 실행 중인 프로세스는(docs/PLANNING.md §6.1) 목록에 경고로 표시된다.
 
 ## 스크립트
 
