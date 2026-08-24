@@ -34,6 +34,17 @@ OPS_ADMIN_EMAIL=you@example.com OPS_ADMIN_PASSWORD='최소 12자' npx prisma db 
 npm run dev   # http://localhost:3000
 ```
 
+### 코드를 새로 받았을 때 (git pull 이후)
+
+`src/generated/prisma`(생성된 Prisma Client)는 git에 커밋되지 않는다. 스키마를 바꾸는 커밋을 받은 뒤 재생성 없이 그대로 서버를 재시작하면 새로 추가된 모델에 대해 `prisma.xxx`가 `undefined`가 되어 `Cannot read properties of undefined (reading 'findMany')` 같은 오류가 난다. `git pull` 후에는 항상:
+
+```bash
+npx prisma migrate deploy
+npx prisma generate
+```
+
+를 실행하고 나서 앱을 재시작할 것 (`npm run dev` 또는 `pm2 restart ops-console`).
+
 ### 환경 변수
 
 | 변수 | 설명 |
