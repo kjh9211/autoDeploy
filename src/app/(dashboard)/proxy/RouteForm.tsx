@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { upsertRoute, type RouteFormState } from "./actions";
 import type { WebproxyRoute } from "@/lib/adapters/webproxy";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 const inputClass =
   "rounded-md border border-black/15 dark:border-white/20 bg-transparent px-3 py-2";
@@ -24,6 +25,7 @@ export function RouteForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-3 max-w-md">
+      <SubmitLoadingOverlay label="저장하는 중입니다…" />
       <label className="flex flex-col gap-1 text-sm">
         <span className="font-medium">Host</span>
         <input

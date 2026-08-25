@@ -1,6 +1,7 @@
 "use client";
 
 import { deleteApp } from "./actions";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 export function DeleteAppButton({ appId, appName }: { appId: number; appName: string }) {
   return (
@@ -12,6 +13,7 @@ export function DeleteAppButton({ appId, appName }: { appId: number; appName: st
         }
       }}
     >
+      <SubmitLoadingOverlay label="삭제하는 중입니다…" />
       <input type="hidden" name="id" value={appId} />
       <button
         type="submit"

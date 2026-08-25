@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 export type AppFormState = { error: string } | null;
 type AppFormAction = (
@@ -51,6 +52,7 @@ export function AppForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-4 max-w-xl">
+      <SubmitLoadingOverlay label="저장하는 중입니다…" />
       {defaults?.id !== undefined && (
         <input type="hidden" name="id" value={defaults.id} />
       )}

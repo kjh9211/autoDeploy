@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { login, type LoginState } from "./actions";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 export function LoginForm({ next }: { next: string }) {
   const [state, formAction, pending] = useActionState<LoginState, FormData>(
@@ -11,6 +12,7 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      <SubmitLoadingOverlay label="로그인 확인 중입니다…" />
       <input type="hidden" name="next" value={next} />
 
       <label className="flex flex-col gap-1 text-sm">

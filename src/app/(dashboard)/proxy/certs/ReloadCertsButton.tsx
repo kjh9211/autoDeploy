@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { reloadCerts, type ReloadCertsState } from "./actions";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 export function ReloadCertsButton() {
   const [state, formAction, pending] = useActionState<ReloadCertsState, FormData>(
@@ -11,6 +12,7 @@ export function ReloadCertsButton() {
 
   return (
     <form action={formAction} className="flex flex-col gap-2">
+      <SubmitLoadingOverlay label="webproxy에 반영하는 중입니다…" />
       <button
         type="submit"
         disabled={pending}

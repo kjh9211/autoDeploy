@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { toggleProxied, updateContent, createRecord, type DnsActionState } from "./actions";
 import { checkDnsRecord, DNS_ISSUE_LABEL } from "@/lib/dnsChecks";
 import type { DnsRecord } from "@/lib/adapters/cloudflare";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 const inputClass =
   "rounded-md border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm";
@@ -16,6 +17,7 @@ function ProxiedToggle({ zoneId, record }: { zoneId: string; record: DnsRecord }
 
   return (
     <form action={formAction} className="inline-flex flex-col gap-1">
+      <SubmitLoadingOverlay label="Cloudflare에 반영하는 중입니다…" />
       <input type="hidden" name="zoneId" value={zoneId} />
       <input type="hidden" name="recordId" value={record.id} />
       <input type="hidden" name="name" value={record.name} />
@@ -57,6 +59,7 @@ function ContentEditor({ zoneId, record }: { zoneId: string; record: DnsRecord }
 
   return (
     <form action={formAction} className="flex flex-col gap-1">
+      <SubmitLoadingOverlay label="저장하는 중입니다…" />
       <input type="hidden" name="zoneId" value={zoneId} />
       <input type="hidden" name="recordId" value={record.id} />
       <input type="hidden" name="name" value={record.name} />
@@ -84,6 +87,7 @@ function CreateRecordForm({ zoneName }: { zoneName: string }) {
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2">
+      <SubmitLoadingOverlay label="레코드를 추가하는 중입니다…" />
       <input type="hidden" name="zoneName" value={zoneName} />
       <label className="flex flex-col gap-1 text-xs">
         유형

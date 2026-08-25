@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { checkAppGitUpdate } from "./actions";
 import type { GitUpdateCheck } from "@/lib/adapters/git";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 export function UpdateCheckButton({ appId }: { appId: number }) {
   const [state, formAction, pending] = useActionState<
@@ -13,6 +14,7 @@ export function UpdateCheckButton({ appId }: { appId: number }) {
   return (
     <div className="flex flex-col gap-3">
       <form action={formAction}>
+        <SubmitLoadingOverlay label="업데이트를 확인하는 중입니다… (git fetch)" />
         <input type="hidden" name="id" value={appId} />
         <button
           type="submit"

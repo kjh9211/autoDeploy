@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listPm2Processes } from "@/lib/adapters/pm2";
 import { prisma } from "@/lib/db/prisma";
 import { createAppFromPm2 } from "../actions";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 const STATUS_LABEL: Record<string, string> = {
   online: "실행 중",
@@ -89,6 +90,7 @@ export default async function FromPm2Page(props: PageProps<"/apps/new/from-pm2">
                 )}
               </div>
               <form action={createAppFromPm2}>
+                <SubmitLoadingOverlay label="등록하는 중입니다…" />
                 <input type="hidden" name="pm2Name" value={p.name} />
                 <input type="hidden" name="cwd" value={p.cwd ?? ""} />
                 <button
