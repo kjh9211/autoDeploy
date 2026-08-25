@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { startDeploy, type StartDeployState } from "./deployActions";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 export function DeployButton({ appId }: { appId: number }) {
   const [state, formAction, pending] = useActionState<StartDeployState, FormData>(
@@ -12,6 +13,7 @@ export function DeployButton({ appId }: { appId: number }) {
 
   return (
     <form action={formAction} className="flex flex-col gap-2">
+      <SubmitLoadingOverlay label="배포를 시작하는 중입니다…" />
       <input type="hidden" name="id" value={appId} />
       <label className="flex items-center gap-2 text-sm">
         <input

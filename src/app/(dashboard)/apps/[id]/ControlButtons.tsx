@@ -1,12 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { controlApp, type ControlAppState } from "./actions";
 import type { Health } from "@/lib/status";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 const CONFIRM_MESSAGE: Record<string, string> = {
   stop: "정말 중지할까요?",
   restart: "정말 재시작할까요?",
+};
+
+const ACTION_LABEL: Record<string, string> = {
+  start: "시작하는 중입니다…",
+  stop: "중지하는 중입니다…",
+  restart: "재시작하는 중입니다…",
 };
 
 const buttonClass =
@@ -17,6 +24,7 @@ export function ControlButtons({ appId, health }: { appId: number; health: Healt
     controlApp,
     null,
   );
+  const [actionLabel, setActionLabel] = useState("처리 중입니다…");
 
   return (
     <div className="flex flex-col gap-2">
@@ -31,9 +39,12 @@ export function ControlButtons({ appId, health }: { appId: number; health: Healt
           const confirmMessage = action ? CONFIRM_MESSAGE[action] : undefined;
           if (confirmMessage && !window.confirm(confirmMessage)) {
             e.preventDefault();
+            return;
           }
+          setActionLabel(ACTION_LABEL[action ?? ""] ?? "처리 중입니다…");
         }}
       >
+        <SubmitLoadingOverlay label={actionLabel} />
         <input type="hidden" name="id" value={appId} />
         <button
           type="submit"

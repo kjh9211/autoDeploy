@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { addMailDomain, type MailActionState } from "./actions";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 const inputClass =
   "rounded-md border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm";
@@ -14,6 +15,7 @@ export function AddDomainForm() {
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-2">
+      <SubmitLoadingOverlay label="도메인을 추가하는 중입니다…" />
       <label className="flex flex-col gap-1 text-xs">
         도메인
         <input type="text" name="domain" required placeholder="example.com" className={inputClass} />

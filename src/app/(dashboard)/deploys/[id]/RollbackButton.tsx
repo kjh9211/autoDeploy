@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { rollbackToDeploy, type RollbackState } from "./actions";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 export function RollbackButton({ deployId, commit }: { deployId: number; commit: string }) {
   const [state, formAction, pending] = useActionState<RollbackState, FormData>(
@@ -24,6 +25,7 @@ export function RollbackButton({ deployId, commit }: { deployId: number; commit:
         }
       }}
     >
+      <SubmitLoadingOverlay label="롤백하는 중입니다…" />
       <input type="hidden" name="deployId" value={deployId} />
       <label className="flex items-center gap-2 text-sm">
         <input

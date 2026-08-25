@@ -1,6 +1,7 @@
 "use client";
 
 import { deleteRoute } from "./actions";
+import { SubmitLoadingOverlay } from "@/components/SubmitLoadingOverlay";
 
 export function DeleteRouteButton({ host }: { host: string }) {
   return (
@@ -12,6 +13,7 @@ export function DeleteRouteButton({ host }: { host: string }) {
         }
       }}
     >
+      <SubmitLoadingOverlay label="삭제하는 중입니다…" />
       <input type="hidden" name="host" value={host} />
       <button
         type="submit"
